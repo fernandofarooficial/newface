@@ -100,6 +100,9 @@ def collect_events(app) -> dict:
             # Verifica duplicata
             exists = db.session.query(EventoFacial).filter_by(event_id=event_id).first()
             if exists:
+                if exists.face_image_url is None and ev.get("face_image_url"):
+                    exists.face_image_url = ev.get("face_image_url")
+                    db.session.commit()
                 result["ignorados"] += 1
                 continue
 
