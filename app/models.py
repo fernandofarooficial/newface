@@ -91,6 +91,7 @@ class EventoFacial(db.Model):
     genero_estimado    = db.Column(db.String(10))
     faixa_etaria       = db.Column(db.String(20))
     face_quality       = db.Column(db.Numeric(5, 4))
+    face_image_url     = db.Column(db.Text)
     model_version      = db.Column(db.String(30))
     processing_node    = db.Column(db.String(60))
     criado_em          = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
@@ -113,6 +114,7 @@ class EventoFacial(db.Model):
             "genero_estimado": self.genero_estimado,
             "faixa_etaria": self.faixa_etaria,
             "face_quality": float(self.face_quality) if self.face_quality else None,
+            "face_image_url": self.face_image_url,
         }
 
 

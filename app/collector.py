@@ -136,6 +136,7 @@ def collect_events(app) -> dict:
                     genero_estimado    = demographics.get("predicted_gender"),
                     faixa_etaria       = demographics.get("predicted_age_range"),
                     face_quality       = ev.get("face_quality"),
+                    face_image_url     = ev.get("face_image_url"),
                     model_version      = system_info.get("model_version"),
                     processing_node    = system_info.get("processing_node"),
                 )

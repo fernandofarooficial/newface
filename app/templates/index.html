@@ -40,6 +40,7 @@
     <table>
       <thead>
         <tr>
+          <th>Foto</th>
           <th>Evento ID</th>
           <th>Data/Hora</th>
           <th>Pessoa</th>
@@ -53,7 +54,7 @@
         </tr>
       </thead>
       <tbody id="tbody-eventos">
-        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
+        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -136,6 +137,11 @@
       }
       tbody.innerHTML = d.items.map(e => `
         <tr>
+          <td style="padding:6px 10px">${e.face_image_url
+            ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(e.face_image_url)}"
+                   style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border)"
+                   onclick="openImg(this.src)" onerror="this.style.display='none'">`
+            : '<span style="color:var(--muted)">—</span>'}</td>
           <td class="mono">${e.event_id}</td>
           <td class="mono">${fmtTs(e.timestamp_evento)}</td>
           <td class="mono">${e.person_unique_id || '—'}</td>
@@ -221,6 +227,13 @@
     }
   }
 
+  // ---- Lightbox ----
+  function openImg(src) {
+    const overlay = document.getElementById('img-overlay');
+    document.getElementById('img-full').src = src;
+    overlay.style.display = 'flex';
+  }
+
   // ---- Init ----
   loadStatus();
   loadEventos();
@@ -228,4 +241,10 @@
   // Auto-refresh a cada 60s
   setInterval(() => { loadStatus(); loadEventos(); }, 60_000);
 </script>
+
+<!-- Lightbox -->
+<div id="img-overlay" onclick="this.style.display='none'"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:1000;align-items:center;justify-content:center;cursor:zoom-out">
+  <img id="img-full" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;border:1px solid var(--border)">
+</div>
 {% endblock %}

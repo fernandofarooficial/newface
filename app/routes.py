@@ -1,8 +1,11 @@
-from flask import Blueprint, jsonify, render_template, request, current_app
+from flask import Blueprint, jsonify, render_template, request, current_app, Response
 from sqlalchemy import func, desc
+import requests as http_requests
+from requests.auth import HTTPBasicAuth
 from . import db
 from .models import EventoFacial, Pessoa, Camera, Estabelecimento, SyncControl
 from .collector import collect_events
+from .config import Config
 
 bp = Blueprint("main", __name__)
 
@@ -129,3 +132,24 @@ def cameras():
 def estabelecimentos():
     items = db.session.query(Estabelecimento).all()
     return jsonify([e.to_dict() for e in items])
+
+
+# ------------------------------------------------------------------
+# Proxy de imagens da API Facial (requer Basic Auth no origem)
+# ------------------------------------------------------------------
+@bp.route("/api/face-image")
+def face_image():
+    path = request.args.get("path", "")
+    if not path or not path.startswith("/media/"):
+        return "", 400
+    url = Config.FACIAL_API_BASE + path
+    try:
+        r = http_requests.get(
+            url,
+            auth=HTTPBasicAuth(Config.FACIAL_API_USER, Config.FACIAL_API_PASS),
+            timeout=10,
+        )
+        content_type = r.headers.get("Content-Type", "image/jpeg")
+        return Response(r.content, status=r.status_code, content_type=content_type)
+    except Exception:
+        return "", 502
