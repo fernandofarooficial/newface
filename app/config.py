@@ -11,7 +11,7 @@ class Config:
     # PostgreSQL
     DB_HOST     = os.getenv("DB_HOST", "72.60.58.241")
     DB_PORT     = int(os.getenv("DB_PORT", "5432"))
-    DB_NAME     = os.getenv("DB_NAME", "Lojas")
+    DB_NAME     = os.getenv("DB_NAME", "lojas")
     DB_SCHEMA   = os.getenv("DB_SCHEMA", "itumbiara")
     DB_USER     = os.getenv("DB_USER", "fefa_dev")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "Fd7493dt")
