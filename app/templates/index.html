@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total de Eventos</div>
+    <div class="stat-value" id="stat-eventos">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Pessoas Únicas</div>
+    <div class="stat-value purple" id="stat-pessoas">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Rostos Conhecidos</div>
+    <div class="stat-value green" id="stat-conhecidos">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Rostos Novos</div>
+    <div class="stat-value yellow" id="stat-novos">—</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="eventos" onclick="switchTab('eventos')">Eventos Recentes</button>
+  <button class="tab-btn" data-tab="pessoas" onclick="switchTab('pessoas')">Pessoas</button>
+</div>
+
+<!-- Tab: Eventos -->
+<div id="tab-eventos" class="tab-panel active">
+  <div class="toolbar">
+    <span class="mono" id="eventos-count">Carregando...</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn secondary" onclick="loadEventos()">↻ Atualizar</button>
+      <button class="btn" id="btn-coletar" onclick="coletar()">⬇ Coletar Agora</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Evento ID</th>
+          <th>Data/Hora</th>
+          <th>Pessoa</th>
+          <th>Nome</th>
+          <th>Câmera</th>
+          <th>Tipo</th>
+          <th>Score</th>
+          <th>Gênero</th>
+          <th>Faixa</th>
+          <th>Qualidade</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-eventos">
+        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tab: Pessoas -->
+<div id="tab-pessoas" class="tab-panel">
+  <div class="toolbar">
+    <span class="mono" id="pessoas-count">Carregando...</span>
+    <button class="btn secondary" onclick="loadPessoas()">↻ Atualizar</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Gênero</th>
+          <th>Faixa Etária</th>
+          <th>Primeira Detecção</th>
+          <th>Última Detecção</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-pessoas">
+        <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const BASE = '';
+
+  function fmtTs(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo',
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  function genderBadge(g) {
+    if (!g) return '<span class="mono">—</span>';
+    return `<span class="badge ${g.toLowerCase()}">${g}</span>`;
+  }
+
+  // ---- Status ----
+  async function loadStatus() {
+    try {
+      const r = await fetch(BASE + '/api/status');
+      const d = await r.json();
+      document.getElementById('stat-eventos').textContent   = d.stats.total_eventos ?? '—';
+      document.getElementById('stat-pessoas').textContent   = d.stats.total_pessoas ?? '—';
+      document.getElementById('stat-conhecidos').textContent= d.stats.deteccoes_conhecidas ?? '—';
+      document.getElementById('stat-novos').textContent     = d.stats.deteccoes_novas ?? '—';
+
+      const dot  = document.getElementById('sync-dot');
+      const text = document.getElementById('sync-text');
+      const s = d.sync.status;
+      dot.className = 'dot ' + (s === 'running' ? '' : s === 'error' ? 'error' : 'idle');
+      text.textContent = d.sync.mensagem || ('Status: ' + s);
+    } catch(e) {
+      document.getElementById('sync-text').textContent = 'Erro ao buscar status';
+    }
+  }
+
+  // ---- Eventos ----
+  async function loadEventos() {
+    const tbody = document.getElementById('tbody-eventos');
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+    try {
+      const r = await fetch(BASE + '/api/eventos?limit=100');
+      const d = await r.json();
+      document.getElementById('eventos-count').textContent = `${d.total} eventos no banco`;
+      if (!d.items.length) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px">Nenhum evento encontrado</td></tr>';
+        return;
+      }
+      tbody.innerHTML = d.items.map(e => `
+        <tr>
+          <td class="mono">${e.event_id}</td>
+          <td class="mono">${fmtTs(e.timestamp_evento)}</td>
+          <td class="mono">${e.person_unique_id || '—'}</td>
+          <td>${e.pessoa_nome !== '—' ? `<strong>${e.pessoa_nome}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
+          <td class="mono">${e.camera_id || '—'}</td>
+          <td>${e.match_type ? `<span class="badge ${e.match_type}">${e.match_type}</span>` : '—'}</td>
+          <td class="mono">${e.match_score != null ? (e.match_score * 100).toFixed(1) + '%' : '—'}</td>
+          <td>${genderBadge(e.genero_estimado)}</td>
+          <td class="mono">${e.faixa_etaria || '—'}</td>
+          <td class="mono">${e.face_quality != null ? (e.face_quality * 100).toFixed(0) + '%' : '—'}</td>
+        </tr>
+      `).join('');
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+    }
+  }
+
+  // ---- Pessoas ----
+  async function loadPessoas() {
+    const tbody = document.getElementById('tbody-pessoas');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+    try {
+      const r = await fetch(BASE + '/api/pessoas?limit=100');
+      const d = await r.json();
+      document.getElementById('pessoas-count').textContent = `${d.total} pessoas identificadas`;
+      if (!d.items.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Nenhuma pessoa encontrada</td></tr>';
+        return;
+      }
+      tbody.innerHTML = d.items.map(p => `
+        <tr>
+          <td class="mono">${p.person_unique_id}</td>
+          <td>
+            <div class="nome-cell">
+              <input class="nome-input" id="nome-${p.id}" value="${p.nome !== '—' ? p.nome : ''}" placeholder="Adicionar nome...">
+              <button class="save-btn" title="Salvar" onclick="salvarNome(${p.id})">✓</button>
+            </div>
+          </td>
+          <td>${genderBadge(p.genero_estimado)}</td>
+          <td class="mono">${p.faixa_etaria || '—'}</td>
+          <td class="mono">${fmtTs(p.primeira_deteccao)}</td>
+          <td class="mono">${fmtTs(p.ultima_deteccao)}</td>
+          <td class="mono" style="color:var(--accent)">${p.total_deteccoes}</td>
+        </tr>
+      `).join('');
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+    }
+  }
+
+  // ---- Salvar nome ----
+  async function salvarNome(pessoaId) {
+    const nome = document.getElementById(`nome-${pessoaId}`).value.trim();
+    try {
+      const r = await fetch(`${BASE}/api/pessoas/${pessoaId}/nome`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({nome})
+      });
+      if (r.ok) showToast('Nome salvo com sucesso!');
+      else showToast('Erro ao salvar nome', 'var(--red)');
+    } catch(e) {
+      showToast('Erro de conexão', 'var(--red)');
+    }
+  }
+
+  // ---- Coletar ----
+  async function coletar() {
+    const btn = document.getElementById('btn-coletar');
+    btn.disabled = true;
+    btn.textContent = 'Coletando...';
+    try {
+      const r = await fetch(BASE + '/api/coletar', {method: 'POST'});
+      const d = await r.json();
+      showToast(`✓ ${d.inseridos} novos, ${d.ignorados} ignorados, ${d.erros} erros`);
+      await loadStatus();
+      await loadEventos();
+    } catch(e) {
+      showToast('Erro na coleta: ' + e.message, 'var(--red)');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⬇ Coletar Agora';
+    }
+  }
+
+  // ---- Init ----
+  loadStatus();
+  loadEventos();
+  loadPessoas();
+  // Auto-refresh a cada 60s
+  setInterval(() => { loadStatus(); loadEventos(); }, 60_000);
+</script>
+{% endblock %}

@@ -1,0 +1,410 @@
+API Facial - Documentacao de Uso
+=================================
+
+Esta API disponibiliza eventos de reconhecimento facial gerados pelas cameras cadastradas no sistema.
+Cada evento representa uma face escolhida como melhor recorte, validada pelo modelo de alinhamento,
+comparada com a base de pessoas do mesmo estabelecimento e salva no banco.
+
+
+1. Base URL
+-----------
+
+Servidor atual:
+
+http://201.71.234.84:8000
+
+Exemplo de endpoint completo:
+
+http://201.71.234.84:8000/api/face-events
+
+
+2. Autenticacao
+---------------
+
+A API usa HTTP Basic Auth.
+
+Usuario:
+
+admin
+
+Senha:
+
+admin@facial26
+
+Exemplo com curl:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events"
+
+No Insomnia/Postman:
+
+Auth Type: Basic Auth
+Username: admin
+Password: admin@facial26
+
+
+3. Conceitos principais
+-----------------------
+
+Evento
+Um evento e uma ocorrencia salva quando uma face foi processada com sucesso.
+
+Pessoa
+Uma pessoa e identificada por um ID unico da API no formato cli_000001.
+
+Camera
+Uma camera e retornada no formato cam_1, cam_2, cam_3 etc.
+
+Estabelecimento
+Cada camera pertence a um estabelecimento. A comparacao facial so ocorre dentro do mesmo estabelecimento.
+Ou seja, uma pessoa vista na loja 1 nao e comparada com pessoas da loja 2.
+
+Correspondencias
+Quando uma pessoa ja apareceu antes, o evento atual traz uma lista de ocorrencias anteriores dessa mesma pessoa
+em recognition.matches.
+
+Imagem da face
+Cada evento traz face_image_url, que aponta para o recorte da face salvo pelo sistema.
+Esse caminho e relativo a Base URL.
+
+Exemplo:
+
+/media/captures/camera_3/track_12_20260610_091432.jpg
+
+URL completa:
+
+http://201.71.234.84:8000/media/captures/camera_3/track_12_20260610_091432.jpg
+
+
+4. Consultar eventos
+--------------------
+
+Retorna os eventos mais recentes.
+
+GET /api/face-events
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events"
+
+Por padrao, retorna ate 50 eventos.
+
+
+5. Limitar quantidade de eventos
+--------------------------------
+
+Use o parametro limit.
+
+GET /api/face-events?limit=10
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?limit=10"
+
+
+6. Filtrar por pessoa
+---------------------
+
+Use person_unique_id.
+
+Formato recomendado:
+
+cli_000123
+
+GET /api/face-events?person_unique_id=cli_000123
+
+Tambem aceita o numero direto:
+
+GET /api/face-events?person_unique_id=123
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?person_unique_id=cli_000123"
+
+
+7. Filtrar por camera
+---------------------
+
+Use camera_id.
+
+Formato recomendado:
+
+cam_3
+
+GET /api/face-events?camera_id=cam_3
+
+Tambem aceita o numero direto:
+
+GET /api/face-events?camera_id=3
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?camera_id=cam_3"
+
+
+8. Filtrar por estabelecimento
+------------------------------
+
+Use store_id numerico.
+
+GET /api/face-events?store_id=1
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?store_id=1"
+
+
+9. Combinar filtros
+-------------------
+
+Os filtros podem ser combinados.
+
+GET /api/face-events?store_id=1&camera_id=cam_3&limit=20
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?store_id=1&camera_id=cam_3&limit=20"
+
+
+10. Limitar correspondencias anteriores
+---------------------------------------
+
+Cada evento retorna as ocorrencias anteriores da mesma pessoa em:
+
+recognition.matches
+
+Por padrao, retorna ate 10 correspondencias anteriores.
+
+Para alterar:
+
+GET /api/face-events?matches_limit=5
+
+Exemplo:
+
+curl -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events?limit=10&matches_limit=5"
+
+
+11. Stream em tempo real com SSE
+--------------------------------
+
+SSE significa Server-Sent Events.
+E uma conexao HTTP que fica aberta para o servidor enviar novos eventos ao front assim que eles aparecem.
+
+Endpoint:
+
+GET /api/face-events/stream
+
+Exemplo:
+
+curl -N -u "admin:admin@facial26" "http://201.71.234.84:8000/api/face-events/stream"
+
+Ao conectar, o servidor envia:
+
+event: ready
+data: {"status":"connected"}
+
+Quando um novo reconhecimento for salvo:
+
+event: face_event
+data: {...json do evento...}
+
+Reenviar eventos recentes ao conectar:
+
+GET /api/face-events/stream?replay_last=20
+
+Receber somente eventos novos:
+
+GET /api/face-events/stream?replay_last=0
+
+Observacao:
+Clientes como Insomnia podem parecer "carregando para sempre". Isso e normal no SSE,
+porque a conexao fica aberta aguardando novos eventos.
+
+
+12. Exemplo de JSON retornado
+-----------------------------
+
+[
+  {
+    "event_id": "evt-20260610-000123",
+    "timestamp": "2026-06-10T09:14:32-03:00",
+    "camera_id": "cam_3",
+    "camera_name": "Entrada principal",
+    "store_id": 1,
+    "store_name": "Loja Centro",
+    "person_count_frame": 4,
+    "face_detected": true,
+    "person_track_id": "12",
+    "face_image_url": "/media/captures/camera_3/track_12_20260610_091432.jpg",
+    "recognition": {
+      "person_unique_id": "cli_000987",
+      "matched": true,
+      "match_score": 0.91,
+      "match_type": "exact",
+      "matches": [
+        {
+          "event_id": "evt-20260609-000118",
+          "timestamp": "2026-06-09T18:21:10-03:00",
+          "camera_id": "cam_2",
+          "camera_name": "Entrada lateral",
+          "store_id": 1,
+          "store_name": "Loja Centro",
+          "face_image_url": "/media/captures/camera_2/track_8_20260609_182110.jpg",
+          "similarity": 0.88
+        },
+        {
+          "event_id": "evt-20260608-000095",
+          "timestamp": "2026-06-08T11:03:44-03:00",
+          "camera_id": "cam_1",
+          "camera_name": "Entrada principal",
+          "store_id": 1,
+          "store_name": "Loja Centro",
+          "face_image_url": "/media/captures/camera_1/track_5_20260608_110344.jpg",
+          "similarity": 0.84
+        }
+      ]
+    },
+    "demographics": {
+      "predicted_age_range": "25-31",
+      "predicted_gender": "female",
+      "age_confidence": null,
+      "gender_confidence": null
+    },
+    "face_quality": 0.97,
+    "system": {
+      "processing_node": "srv-visao-01",
+      "model_version": "fr-v1.3.2"
+    }
+  }
+]
+
+
+13. Explicacao dos campos
+-------------------------
+
+event_id
+ID unico do evento no formato evt-AAAAMMDD-000001.
+
+timestamp
+Data e hora em que o evento foi salvo.
+
+camera_id
+ID publico da camera no formato cam_1.
+
+camera_name
+Nome cadastrado para a camera.
+
+store_id
+ID numerico do estabelecimento.
+
+store_name
+Nome do estabelecimento.
+
+person_count_frame
+Quantidade de tracks/pessoas que estavam ativos no momento em que aquele evento foi fechado.
+
+face_detected
+Sempre true para eventos retornados, porque o evento so existe se uma face foi detectada e processada.
+
+person_track_id
+ID de rastreamento usado internamente para agrupar recortes daquela pessoa naquela camera.
+
+face_image_url
+Caminho relativo para a imagem da face escolhida como melhor recorte.
+
+recognition.person_unique_id
+ID publico da pessoa reconhecida no formato cli_000001.
+
+recognition.matched
+true quando a pessoa ja existia na base daquele estabelecimento.
+false quando foi criada uma nova pessoa.
+
+recognition.match_score
+Similaridade calculada entre o embedding atual e a pessoa encontrada.
+
+recognition.match_type
+Tipo de correspondencia.
+Valores atuais:
+exact: pessoa conhecida encontrada acima do threshold.
+new: nova pessoa criada.
+
+recognition.matches
+Lista de ocorrencias anteriores da mesma pessoa.
+Cada item contem timestamp, camera, estabelecimento, imagem e similaridade.
+
+demographics.predicted_age_range
+Faixa etaria estimada a partir da idade inferida pelo InsightFace.
+
+demographics.predicted_gender
+Genero estimado.
+Valores comuns:
+male
+female
+null quando nao foi possivel estimar.
+
+demographics.age_confidence
+Atualmente null, porque o modulo genderage do InsightFace nao fornece confianca explicita.
+
+demographics.gender_confidence
+Atualmente null, pelo mesmo motivo.
+
+face_quality
+Confianca do modelo de classificacao de alinhamento facial para o recorte escolhido.
+Quanto mais proximo de 1.0, maior a confianca de que o recorte estava na classe correto.
+
+system.processing_node
+Identificacao do servidor que processou o evento.
+
+system.model_version
+Versao logica do conjunto de modelos/pipeline.
+
+
+14. Exemplo JavaScript com fetch
+--------------------------------
+
+const username = "admin";
+const password = "admin@facial26";
+const token = btoa(`${username}:${password}`);
+
+fetch("http://201.71.234.84:8000/api/face-events?limit=10", {
+  headers: {
+    Authorization: `Basic ${token}`
+  }
+})
+  .then((response) => response.json())
+  .then((events) => console.log(events));
+
+
+15. Exemplo JavaScript com SSE
+------------------------------
+
+Observacao:
+EventSource nativo do navegador nao permite setar Authorization header diretamente.
+Para SSE autenticado por Basic Auth, o caminho mais simples e servir o front no mesmo dominio
+ou usar uma biblioteca/polyfill que permita headers.
+
+Quando o front esta no mesmo servidor da API:
+
+const stream = new EventSource("/api/face-events/stream");
+
+stream.addEventListener("ready", (event) => {
+  console.log("SSE conectado", event.data);
+});
+
+stream.addEventListener("face_event", (event) => {
+  const payload = JSON.parse(event.data);
+  console.log("Novo reconhecimento", payload);
+});
+
+
+16. Observacoes tecnicas
+------------------------
+
+1. Se nenhum filtro for enviado, a API retorna os eventos mais recentes, limitado por limit.
+2. O valor padrao de limit e 50.
+3. O valor padrao de matches_limit e 10.
+4. person_unique_id aceita cli_000001 ou 1.
+5. camera_id aceita cam_1 ou 1.
+6. store_id e numerico.
+7. face_image_url e relativo a Base URL.
+8. A comparacao facial e isolada por estabelecimento.
+9. As imagens em /media tambem exigem Basic Auth quando acessadas externamente.
