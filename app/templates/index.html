@@ -88,7 +88,7 @@
 
 {% block scripts %}
 <script>
-  const BASE = '';
+  const BASE = '{{ request.script_root }}';
 
   function fmtTs(ts) {
     if (!ts) return '—';

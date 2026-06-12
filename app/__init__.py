@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .config import Config
 
 db = SQLAlchemy()
@@ -9,6 +10,7 @@ scheduler = BackgroundScheduler(daemon=True)
 
 def create_app():
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     app.config.from_object(Config)
 
     db.init_app(app)
