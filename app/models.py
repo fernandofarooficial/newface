@@ -101,7 +101,8 @@ class EventoFacial(db.Model):
     estabelecimento= db.relationship("Estabelecimento", back_populates="eventos")
     matches        = db.relationship("EventoMatch", back_populates="evento", cascade="all, delete-orphan")
 
-    def to_dict(self):
+    def to_dict(self, match_images=None):
+        imgs = match_images or {}
         return {
             "id": self.id,
             "event_id": self.event_id,
@@ -122,6 +123,7 @@ class EventoFacial(db.Model):
                     "timestamp_ref": m.timestamp_ref.isoformat() if m.timestamp_ref else None,
                     "camera_id_ref": m.camera_id_ref,
                     "similarity": float(m.similarity) if m.similarity else None,
+                    "face_image_url": imgs.get(m.event_id_ref),
                 }
                 for m in self.matches
             ],

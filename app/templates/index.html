@@ -57,6 +57,13 @@
         <option value="">Todas</option>
       </select>
     </div>
+    <div class="filter-group">
+      <label class="filter-label" style="cursor:pointer;display:flex;align-items:center;gap:5px">
+        <input type="checkbox" id="f-has-matches" onchange="loadEventos()"
+               style="accent-color:var(--accent2);width:14px;height:14px;cursor:pointer">
+        Com matches
+      </label>
+    </div>
     <div class="filter-actions">
       <button class="btn secondary" onclick="clearFiltros()">✕ Limpar</button>
     </div>
@@ -173,7 +180,13 @@
       const sim = m.similarity != null ? m.similarity : null;
       const simPct = sim != null ? (sim * 100).toFixed(1) + '%' : '—';
       const barFill = sim != null ? `<span class="similarity-bar"><span class="similarity-bar-fill" style="width:${(sim*100).toFixed(0)}%"></span></span>` : '';
+      const photo = m.face_image_url
+        ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(m.face_image_url)}"
+               style="width:40px;height:40px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:pointer;display:block"
+               onclick="openImg(this.src)" onerror="this.style.display='none'">`
+        : '<span style="color:var(--muted)">—</span>';
       return `<tr>
+        <td style="padding:4px 10px">${photo}</td>
         <td class="mono" style="color:var(--text)">${m.event_id_ref}</td>
         <td>${fmtTs(m.timestamp_ref)}</td>
         <td>${m.camera_id_ref || '—'}</td>
@@ -186,7 +199,7 @@
       <div class="matches-detail">
         <div class="matches-detail-header">${qualLabel}${e.matches.length} match(es) anterior(es)</div>
         <table class="matches-inner">
-          <thead><tr><th>Evento Referência</th><th>Data/Hora</th><th>Câmera</th><th>Similaridade</th></tr></thead>
+          <thead><tr><th>Foto</th><th>Evento Referência</th><th>Data/Hora</th><th>Câmera</th><th>Similaridade</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -251,6 +264,7 @@
     document.getElementById('f-date-to').value = '';
     document.getElementById('f-pessoa').value = '';
     document.getElementById('f-estabelecimento').value = '';
+    document.getElementById('f-has-matches').checked = false;
     filterCameras('');
     document.getElementById('f-camera').value = '';
     loadEventos();
@@ -267,11 +281,13 @@
     const pessoaId = document.getElementById('f-pessoa')?.value;
     const storeId  = document.getElementById('f-estabelecimento')?.value;
     const cameraId = document.getElementById('f-camera')?.value;
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo)   params.set('date_to',   dateTo);
-    if (pessoaId) params.set('pessoa_id', pessoaId);
-    if (storeId)  params.set('store_id',  storeId);
-    if (cameraId) params.set('camera_id', cameraId);
+    const hasMatches = document.getElementById('f-has-matches')?.checked;
+    if (dateFrom)   params.set('date_from',   dateFrom);
+    if (dateTo)     params.set('date_to',     dateTo);
+    if (pessoaId)   params.set('pessoa_id',   pessoaId);
+    if (storeId)    params.set('store_id',    storeId);
+    if (cameraId)   params.set('camera_id',   cameraId);
+    if (hasMatches) params.set('has_matches', '1');
 
     try {
       const r = await fetch(BASE + '/api/eventos?' + params);

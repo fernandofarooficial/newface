@@ -90,14 +90,25 @@ def eventos():
         except ValueError:
             pass
 
+    if request.args.get("has_matches") == "1":
+        q = q.filter(EventoFacial.matched == True)
+
     total = q.count()
     items = q.offset(offset).limit(limit).all()
+
+    # Batch-fetch face_image_url dos eventos referenciados nos matches
+    all_refs = [m.event_id_ref for ev in items for m in ev.matches]
+    match_images = {}
+    if all_refs:
+        rows = db.session.query(EventoFacial.event_id, EventoFacial.face_image_url)\
+            .filter(EventoFacial.event_id.in_(all_refs)).all()
+        match_images = {row.event_id: row.face_image_url for row in rows}
 
     return jsonify({
         "total": total,
         "limit": limit,
         "offset": offset,
-        "items": [e.to_dict() for e in items]
+        "items": [e.to_dict(match_images=match_images) for e in items]
     })
 
 
