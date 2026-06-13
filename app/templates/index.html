@@ -29,6 +29,39 @@
 
 <!-- Tab: Eventos -->
 <div id="tab-eventos" class="tab-panel active">
+  <!-- Barra de filtros -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label class="filter-label">De</label>
+      <input type="date" id="f-date-from" class="filter-input" onchange="loadEventos()">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Até</label>
+      <input type="date" id="f-date-to" class="filter-input" onchange="loadEventos()">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Pessoa</label>
+      <select id="f-pessoa" class="filter-select" onchange="loadEventos()">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Estabelecimento</label>
+      <select id="f-estabelecimento" class="filter-select" onchange="onEstabelecimentoChange()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Câmera</label>
+      <select id="f-camera" class="filter-select" onchange="loadEventos()">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button class="btn secondary" onclick="clearFiltros()">✕ Limpar</button>
+    </div>
+  </div>
+
   <div class="toolbar">
     <span class="mono" id="eventos-count">Carregando...</span>
     <div style="display:flex;gap:8px">
@@ -123,16 +156,91 @@
     }
   }
 
+  // ---- Filtros ----
+  let allCameras = [];
+
+  async function loadFiltroOptions() {
+    const [rCam, rEst, rPes] = await Promise.all([
+      fetch(BASE + '/api/cameras'),
+      fetch(BASE + '/api/estabelecimentos'),
+      fetch(BASE + '/api/pessoas?limit=200'),
+    ]);
+    allCameras = await rCam.json();
+    const estabelecimentos = await rEst.json();
+    const pessoasData = await rPes.json();
+
+    const selEst = document.getElementById('f-estabelecimento');
+    estabelecimentos.forEach(e => {
+      const o = document.createElement('option');
+      o.value = e.id;
+      o.textContent = e.nome;
+      selEst.appendChild(o);
+    });
+
+    filterCameras('');
+
+    const selPes = document.getElementById('f-pessoa');
+    (pessoasData.items || []).forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.nome !== '—' ? `${p.nome} (${p.person_unique_id})` : p.person_unique_id;
+      selPes.appendChild(o);
+    });
+  }
+
+  function filterCameras(estId) {
+    const sel = document.getElementById('f-camera');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>';
+    const list = estId ? allCameras.filter(c => String(c.estabelecimento_id) === String(estId)) : allCameras;
+    list.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.camera_id;
+      o.textContent = c.nome || c.camera_id;
+      sel.appendChild(o);
+    });
+    if (list.some(c => c.camera_id === prev)) sel.value = prev;
+  }
+
+  function onEstabelecimentoChange() {
+    filterCameras(document.getElementById('f-estabelecimento').value);
+    document.getElementById('f-camera').value = '';
+    loadEventos();
+  }
+
+  function clearFiltros() {
+    document.getElementById('f-date-from').value = '';
+    document.getElementById('f-date-to').value = '';
+    document.getElementById('f-pessoa').value = '';
+    document.getElementById('f-estabelecimento').value = '';
+    filterCameras('');
+    document.getElementById('f-camera').value = '';
+    loadEventos();
+  }
+
   // ---- Eventos ----
   async function loadEventos() {
     const tbody = document.getElementById('tbody-eventos');
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+
+    const params = new URLSearchParams({ limit: 100 });
+    const dateFrom = document.getElementById('f-date-from')?.value;
+    const dateTo   = document.getElementById('f-date-to')?.value;
+    const pessoaId = document.getElementById('f-pessoa')?.value;
+    const storeId  = document.getElementById('f-estabelecimento')?.value;
+    const cameraId = document.getElementById('f-camera')?.value;
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo)   params.set('date_to',   dateTo);
+    if (pessoaId) params.set('pessoa_id', pessoaId);
+    if (storeId)  params.set('store_id',  storeId);
+    if (cameraId) params.set('camera_id', cameraId);
+
     try {
-      const r = await fetch(BASE + '/api/eventos?limit=100');
+      const r = await fetch(BASE + '/api/eventos?' + params);
       const d = await r.json();
-      document.getElementById('eventos-count').textContent = `${d.total} eventos no banco`;
+      document.getElementById('eventos-count').textContent = `${d.total} eventos encontrados`;
       if (!d.items.length) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px">Nenhum evento encontrado</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Nenhum evento encontrado</td></tr>';
         return;
       }
       tbody.innerHTML = d.items.map(e => `
@@ -155,7 +263,7 @@
         </tr>
       `).join('');
     } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
     }
   }
 
@@ -236,7 +344,7 @@
 
   // ---- Init ----
   loadStatus();
-  loadEventos();
+  loadFiltroOptions().then(() => loadEventos());
   loadPessoas();
   // Auto-refresh a cada 60s
   setInterval(() => { loadStatus(); loadEventos(); }, 60_000);

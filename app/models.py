@@ -38,7 +38,8 @@ class Camera(db.Model):
 
     def to_dict(self):
         return {"id": self.id, "camera_id": self.camera_id, "nome": self.nome,
-                "localizacao": self.localizacao, "ativa": self.ativa}
+                "localizacao": self.localizacao, "ativa": self.ativa,
+                "estabelecimento_id": self.estabelecimento_id}
 
 
 class Pessoa(db.Model):

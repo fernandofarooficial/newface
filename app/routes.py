@@ -1,3 +1,5 @@
+from datetime import datetime, timezone, timedelta
+
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
 from sqlalchemy import func, desc
 import requests as http_requests
@@ -66,6 +68,26 @@ def eventos():
     match_type = request.args.get("match_type")
     if match_type:
         q = q.filter(EventoFacial.match_type == match_type)
+
+    pessoa_id = request.args.get("pessoa_id")
+    if pessoa_id:
+        q = q.filter(EventoFacial.pessoa_id == pessoa_id)
+
+    date_from = request.args.get("date_from")
+    if date_from:
+        try:
+            dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            q = q.filter(EventoFacial.timestamp_evento >= dt)
+        except ValueError:
+            pass
+
+    date_to = request.args.get("date_to")
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            q = q.filter(EventoFacial.timestamp_evento < dt)
+        except ValueError:
+            pass
 
     total = q.count()
     items = q.offset(offset).limit(limit).all()
