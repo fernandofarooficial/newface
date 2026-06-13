@@ -228,6 +228,77 @@
       padding: 2px 4px;
     }
 
+    /* Match history expand */
+    tr.has-matches { cursor: pointer; }
+    tr.has-matches:hover td { background: rgba(0,229,255,.03) !important; }
+    .match-count-badge {
+      display: inline-block;
+      background: rgba(123,97,255,.2);
+      color: var(--accent2);
+      border-radius: 10px;
+      font-size: 10px;
+      font-family: var(--mono);
+      padding: 1px 6px;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+    tr.matches-row > td {
+      padding: 0 !important;
+      border-bottom: 2px solid var(--border) !important;
+    }
+    .matches-detail {
+      padding: 10px 14px 12px 60px;
+      background: rgba(123,97,255,.04);
+    }
+    .matches-detail-header {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+    .matches-inner {
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .matches-inner th {
+      padding: 5px 12px;
+      font-size: 10px;
+      text-align: left;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .matches-inner td {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .matches-inner tbody tr:last-child td { border-bottom: none; }
+    .similarity-bar {
+      display: inline-block;
+      width: 60px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-left: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+    .similarity-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      background: var(--accent2);
+      border-radius: 2px;
+    }
+
     /* Filter bar */
     .filter-bar {
       display: flex;

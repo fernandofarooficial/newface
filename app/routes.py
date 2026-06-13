@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
 from sqlalchemy import func, desc
+from sqlalchemy.orm import subqueryload
 import requests as http_requests
 from requests.auth import HTTPBasicAuth
 from . import db
@@ -55,7 +56,7 @@ def eventos():
     limit  = min(int(request.args.get("limit", 50)), 200)
     offset = int(request.args.get("offset", 0))
 
-    q = db.session.query(EventoFacial).order_by(desc(EventoFacial.timestamp_evento))
+    q = db.session.query(EventoFacial).options(subqueryload(EventoFacial.matches)).order_by(desc(EventoFacial.timestamp_evento))
 
     camera_id = request.args.get("camera_id")
     if camera_id:

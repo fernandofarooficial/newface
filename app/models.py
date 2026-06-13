@@ -116,6 +116,15 @@ class EventoFacial(db.Model):
             "faixa_etaria": self.faixa_etaria,
             "face_quality": float(self.face_quality) if self.face_quality else None,
             "face_image_url": self.face_image_url,
+            "matches": [
+                {
+                    "event_id_ref": m.event_id_ref,
+                    "timestamp_ref": m.timestamp_ref.isoformat() if m.timestamp_ref else None,
+                    "camera_id_ref": m.camera_id_ref,
+                    "similarity": float(m.similarity) if m.similarity else None,
+                }
+                for m in self.matches
+            ],
         }
 
 

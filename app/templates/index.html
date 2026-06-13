@@ -156,6 +156,44 @@
     }
   }
 
+  // ---- Match history expand/collapse ----
+  let eventsData = [];
+
+  function toggleMatches(tr, idx) {
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('matches-row')) {
+      next.remove();
+      return;
+    }
+    const e = eventsData[idx];
+    const qualLabel = e.face_quality != null
+      ? `Qualidade da captura: <strong style="color:var(--text)">${(e.face_quality * 100).toFixed(0)}%</strong> &nbsp;·&nbsp;`
+      : '';
+    const rows = e.matches.map(m => {
+      const sim = m.similarity != null ? m.similarity : null;
+      const simPct = sim != null ? (sim * 100).toFixed(1) + '%' : '—';
+      const barFill = sim != null ? `<span class="similarity-bar"><span class="similarity-bar-fill" style="width:${(sim*100).toFixed(0)}%"></span></span>` : '';
+      return `<tr>
+        <td class="mono" style="color:var(--text)">${m.event_id_ref}</td>
+        <td>${fmtTs(m.timestamp_ref)}</td>
+        <td>${m.camera_id_ref || '—'}</td>
+        <td>${simPct}${barFill}</td>
+      </tr>`;
+    }).join('');
+    const detail = document.createElement('tr');
+    detail.className = 'matches-row';
+    detail.innerHTML = `<td colspan="11">
+      <div class="matches-detail">
+        <div class="matches-detail-header">${qualLabel}${e.matches.length} match(es) anterior(es)</div>
+        <table class="matches-inner">
+          <thead><tr><th>Evento Referência</th><th>Data/Hora</th><th>Câmera</th><th>Similaridade</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </td>`;
+    tr.after(detail);
+  }
+
   // ---- Filtros ----
   let allCameras = [];
 
@@ -238,30 +276,36 @@
     try {
       const r = await fetch(BASE + '/api/eventos?' + params);
       const d = await r.json();
+      eventsData = d.items;
       document.getElementById('eventos-count').textContent = `${d.total} eventos encontrados`;
       if (!d.items.length) {
         tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Nenhum evento encontrado</td></tr>';
         return;
       }
-      tbody.innerHTML = d.items.map(e => `
-        <tr>
+      tbody.innerHTML = d.items.map((e, idx) => {
+        const hasMatches = e.matches && e.matches.length > 0;
+        const matchBadge = hasMatches
+          ? `<span class="match-count-badge" title="Clique para ver histórico">${e.matches.length}</span>`
+          : '';
+        return `
+        <tr ${hasMatches ? `class="has-matches" onclick="toggleMatches(this, ${idx})" title="Clique para ver ${e.matches.length} match(es) anterior(es)"` : ''}>
           <td style="padding:6px 10px">${e.face_image_url
             ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(e.face_image_url)}"
                    style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border)"
-                   onclick="openImg(this.src)" onerror="this.style.display='none'">`
+                   onclick="event.stopPropagation();openImg(this.src)" onerror="this.style.display='none'">`
             : '<span style="color:var(--muted)">—</span>'}</td>
           <td class="mono">${e.event_id}</td>
           <td class="mono">${fmtTs(e.timestamp_evento)}</td>
           <td class="mono">${e.person_unique_id || '—'}</td>
           <td>${e.pessoa_nome !== '—' ? `<strong>${e.pessoa_nome}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
           <td class="mono">${e.camera_id || '—'}</td>
-          <td>${e.match_type ? `<span class="badge ${e.match_type}">${e.match_type}</span>` : '—'}</td>
+          <td>${e.match_type ? `<span class="badge ${e.match_type}">${e.match_type}</span>${matchBadge}` : '—'}</td>
           <td class="mono">${e.match_score != null ? (e.match_score * 100).toFixed(1) + '%' : '—'}</td>
           <td>${genderBadge(e.genero_estimado)}</td>
           <td class="mono">${e.faixa_etaria || '—'}</td>
           <td class="mono">${e.face_quality != null ? (e.face_quality * 100).toFixed(0) + '%' : '—'}</td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     } catch(e) {
       tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
     }
