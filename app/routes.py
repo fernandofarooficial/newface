@@ -218,6 +218,7 @@ def pessoas_eventos():
             .filter(EventoFacial.event_id.in_(all_refs)).all()
         match_images = {row.event_id: row.face_image_url for row in rows}
 
+    # Agrupa eventos por pessoa mantendo objetos brutos para deduplicação posterior
     groups = OrderedDict()
     for ev in eventos:
         key = ev.pessoa_id or ev.event_id
@@ -233,11 +234,24 @@ def pessoas_eventos():
                     "faixa_etaria": ev.faixa_etaria,
                     "total_deteccoes": None,
                 }
-            groups[key] = {"pessoa": pessoa_dict, "eventos": []}
-        if len(groups[key]["eventos"]) < 20:
-            groups[key]["eventos"].append(ev.to_dict(match_images=match_images))
+            groups[key] = {"pessoa": pessoa_dict, "evs": []}
+        if len(groups[key]["evs"]) < 40:
+            groups[key]["evs"].append(ev)
 
-    items = list(groups.values())
+    items = []
+    for group in groups.values():
+        evs = group["evs"]
+        # event_ids que já aparecem como referência de match dentro deste grupo
+        # não devem ser exibidos como cards independentes (a foto já aparece no card do evento novo)
+        referenced = {m.event_id_ref for ev in evs for m in ev.matches}
+        top_level = [ev for ev in evs if ev.event_id not in referenced]
+        if not top_level:
+            top_level = evs[:1]  # garante ao menos um card por pessoa
+        items.append({
+            "pessoa": group["pessoa"],
+            "eventos": [ev.to_dict(match_images=match_images) for ev in top_level[:20]],
+        })
+
     return jsonify({"total": len(items), "items": items})
 
 
