@@ -205,14 +205,21 @@
       ? `${p.total_deteccoes} detecção(ões)`
       : `${evs.length} evento(s)`;
 
-    // URLs que já aparecem como foto principal: não devem ser repetidas como foto de match
-    const primaryUrls = new Set(evs.map(e => e.face_image_url).filter(Boolean));
+    // URLs já usadas como foto principal — match reference só aparece se não estiver aqui
+    const primaryUrls   = new Set(evs.map(e => e.face_image_url).filter(Boolean));
+    // URLs de match reference já exibidas — evita repetir a mesma referência externa
+    const shownMatchUrls = new Set();
 
     const cardsHtml = evs.map(e => {
       const best = e.matches && e.matches.length > 0 ? e.matches[0] : null;
-      // Mostra a foto de referência apenas se ela não é foto principal de nenhum outro card
-      const matchToShow = (best && best.face_image_url && !primaryUrls.has(best.face_image_url))
-        ? best : null;
+      let matchToShow = null;
+      if (best && best.face_image_url) {
+        const ref = best.face_image_url;
+        if (!primaryUrls.has(ref) && !shownMatchUrls.has(ref)) {
+          matchToShow = best;
+          shownMatchUrls.add(ref);
+        }
+      }
       return renderEventoCard(e, matchToShow);
     }).join('');
 

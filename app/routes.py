@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
@@ -172,14 +171,8 @@ def estabelecimentos():
 # ------------------------------------------------------------------
 # API - Eventos agrupados por pessoa (ordem pelo evento mais recente)
 # ------------------------------------------------------------------
-@bp.route("/api/pessoas-eventos")
-def pessoas_eventos():
-    q = (
-        db.session.query(EventoFacial)
-        .options(subqueryload(EventoFacial.matches))
-        .order_by(desc(EventoFacial.timestamp_evento))
-    )
-
+def _build_event_filters(q):
+    """Aplica os filtros de evento comuns vindo da query string."""
     camera_id = request.args.get("camera_id")
     if camera_id:
         q = q.filter(EventoFacial.camera_id == camera_id)
@@ -189,9 +182,6 @@ def pessoas_eventos():
     match_type = request.args.get("match_type")
     if match_type:
         q = q.filter(EventoFacial.match_type == match_type)
-    pessoa_id = request.args.get("pessoa_id")
-    if pessoa_id:
-        q = q.filter(EventoFacial.pessoa_id == pessoa_id)
     date_from = request.args.get("date_from")
     if date_from:
         try:
@@ -208,42 +198,45 @@ def pessoas_eventos():
             pass
     if request.args.get("has_matches") == "1":
         q = q.filter(EventoFacial.matched == True)
+    return q
 
-    eventos = q.limit(500).all()
 
-    all_refs = [m.event_id_ref for ev in eventos for m in ev.matches]
-    match_images = {}
-    if all_refs:
-        rows = db.session.query(EventoFacial.event_id, EventoFacial.face_image_url) \
-            .filter(EventoFacial.event_id.in_(all_refs)).all()
-        match_images = {row.event_id: row.face_image_url for row in rows}
+@bp.route("/api/pessoas-eventos")
+def pessoas_eventos():
+    pessoa_id = request.args.get("pessoa_id")
 
-    groups = OrderedDict()
-    for ev in eventos:
-        key = ev.pessoa_id or ev.event_id
-        if key not in groups:
-            if ev.pessoa:
-                pessoa_dict = ev.pessoa.to_dict()
-            else:
-                pessoa_dict = {
-                    "id": None,
-                    "person_unique_id": ev.person_unique_id or "—",
-                    "nome": "—",
-                    "genero_estimado": ev.genero_estimado,
-                    "faixa_etaria": ev.faixa_etaria,
-                    "total_deteccoes": None,
-                }
-            groups[key] = {"pessoa": pessoa_dict, "evs": []}
-        if len(groups[key]["evs"]) < 20:
-            groups[key]["evs"].append(ev)
+    # Seleciona as pessoas a exibir, ordenadas pela detecção mais recente
+    pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
+        .order_by(desc(Pessoa.ultima_deteccao))
+    if pessoa_id:
+        pq = pq.filter(Pessoa.id == pessoa_id)
+    pessoas = pq.limit(50).all()
 
-    items = [
-        {
-            "pessoa": g["pessoa"],
-            "eventos": [ev.to_dict(match_images=match_images) for ev in g["evs"]],
-        }
-        for g in groups.values()
-    ]
+    items = []
+    for p in pessoas:
+        # Query de eventos específica para esta pessoa, com todos os filtros
+        eq = _build_event_filters(
+            db.session.query(EventoFacial)
+            .options(subqueryload(EventoFacial.matches))
+            .filter(EventoFacial.pessoa_id == p.id)
+            .order_by(desc(EventoFacial.timestamp_evento))
+        )
+        eventos = eq.limit(20).all()
+        if not eventos:
+            continue
+
+        all_refs = [m.event_id_ref for ev in eventos for m in ev.matches]
+        match_images = {}
+        if all_refs:
+            rows = db.session.query(EventoFacial.event_id, EventoFacial.face_image_url)\
+                .filter(EventoFacial.event_id.in_(all_refs)).all()
+            match_images = {row.event_id: row.face_image_url for row in rows}
+
+        items.append({
+            "pessoa": p.to_dict(),
+            "eventos": [ev.to_dict(match_images=match_images) for ev in eventos],
+        })
+
     return jsonify({"total": len(items), "items": items})
 
 
