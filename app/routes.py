@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
@@ -166,6 +167,78 @@ def cameras():
 def estabelecimentos():
     items = db.session.query(Estabelecimento).all()
     return jsonify([e.to_dict() for e in items])
+
+
+# ------------------------------------------------------------------
+# API - Eventos agrupados por pessoa (ordem pelo evento mais recente)
+# ------------------------------------------------------------------
+@bp.route("/api/pessoas-eventos")
+def pessoas_eventos():
+    q = (
+        db.session.query(EventoFacial)
+        .options(subqueryload(EventoFacial.matches))
+        .order_by(desc(EventoFacial.timestamp_evento))
+    )
+
+    camera_id = request.args.get("camera_id")
+    if camera_id:
+        q = q.filter(EventoFacial.camera_id == camera_id)
+    store_id = request.args.get("store_id")
+    if store_id:
+        q = q.filter(EventoFacial.estabelecimento_id == store_id)
+    match_type = request.args.get("match_type")
+    if match_type:
+        q = q.filter(EventoFacial.match_type == match_type)
+    pessoa_id = request.args.get("pessoa_id")
+    if pessoa_id:
+        q = q.filter(EventoFacial.pessoa_id == pessoa_id)
+    date_from = request.args.get("date_from")
+    if date_from:
+        try:
+            dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            q = q.filter(EventoFacial.timestamp_evento >= dt)
+        except ValueError:
+            pass
+    date_to = request.args.get("date_to")
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            q = q.filter(EventoFacial.timestamp_evento < dt)
+        except ValueError:
+            pass
+    if request.args.get("has_matches") == "1":
+        q = q.filter(EventoFacial.matched == True)
+
+    eventos = q.limit(500).all()
+
+    all_refs = [m.event_id_ref for ev in eventos for m in ev.matches]
+    match_images = {}
+    if all_refs:
+        rows = db.session.query(EventoFacial.event_id, EventoFacial.face_image_url) \
+            .filter(EventoFacial.event_id.in_(all_refs)).all()
+        match_images = {row.event_id: row.face_image_url for row in rows}
+
+    groups = OrderedDict()
+    for ev in eventos:
+        key = ev.pessoa_id or ev.event_id
+        if key not in groups:
+            if ev.pessoa:
+                pessoa_dict = ev.pessoa.to_dict()
+            else:
+                pessoa_dict = {
+                    "id": None,
+                    "person_unique_id": ev.person_unique_id or "—",
+                    "nome": "—",
+                    "genero_estimado": ev.genero_estimado,
+                    "faixa_etaria": ev.faixa_etaria,
+                    "total_deteccoes": None,
+                }
+            groups[key] = {"pessoa": pessoa_dict, "eventos": []}
+        if len(groups[key]["eventos"]) < 20:
+            groups[key]["eventos"].append(ev.to_dict(match_images=match_images))
+
+    items = list(groups.values())
+    return jsonify({"total": len(items), "items": items})
 
 
 # ------------------------------------------------------------------

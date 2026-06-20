@@ -281,32 +281,90 @@
       z-index: 999;
     }
 
-    /* ---- Event Cards ---- */
-    .eventos-grid {
+    /* ---- Pessoa rows ---- */
+    .pessoas-rows {
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding: 4px 0;
+      flex-direction: column;
+      gap: 8px;
     }
     .eventos-empty {
       color: var(--muted);
       padding: 40px;
-      width: 100%;
       text-align: center;
       font-family: var(--mono);
       font-size: 13px;
     }
-    .evento-card {
+
+    .pessoa-row {
+      display: flex;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .pessoa-row-info {
+      width: 148px;
+      flex-shrink: 0;
+      padding: 16px 14px;
+      border-right: 1px solid var(--border);
+      background: rgba(0,0,0,.18);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pessoa-row-code {
+      font-family: var(--mono);
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1.1;
+      word-break: break-all;
+      letter-spacing: .02em;
+    }
+    .pessoa-row-nome {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      margin-top: 4px;
+    }
+    .pessoa-row-meta {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .pessoa-row-count {
+      margin-top: auto;
+      padding-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent2);
+    }
+
+    .pessoa-row-eventos {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      flex: 1;
+      align-items: flex-start;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .pessoa-row-eventos::-webkit-scrollbar { height: 4px; }
+    .pessoa-row-eventos::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ---- Event mini-cards (inside pessoa rows) ---- */
+    .evento-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
     }
-    .evento-card.single { width: 120px; }
-    .evento-card.dual   { width: 232px; }
+    .evento-card.single { width: 130px; }
+    .evento-card.dual   { width: 254px; }
 
     .evento-photos {
       display: flex;
@@ -317,7 +375,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      background: #0a0c10;
+      background: #06080c;
       min-width: 0;
     }
     .evento-photo-col img {
@@ -326,8 +384,9 @@
       object-fit: cover;
       display: block;
       cursor: pointer;
+      transition: opacity .12s;
     }
-    .evento-photo-col img:hover { opacity: .88; }
+    .evento-photo-col img:hover { opacity: .82; }
     .evento-photo-placeholder {
       width: 100%;
       aspect-ratio: 1;
@@ -335,8 +394,7 @@
       align-items: center;
       justify-content: center;
       color: var(--border);
-      font-size: 22px;
-      background: #0a0c10;
+      font-size: 20px;
     }
     .evento-photo-ts {
       padding: 3px 4px;
@@ -346,14 +404,13 @@
       font-size: 9px;
       color: var(--muted);
       text-align: center;
-      line-height: 1.5;
+      line-height: 1.55;
     }
     .evento-card-body {
-      padding: 7px 8px 8px;
+      padding: 6px 7px 7px;
       display: flex;
       flex-direction: column;
       gap: 3px;
-      flex: 1;
     }
     .evento-card-cam {
       display: flex;
@@ -366,13 +423,6 @@
       font-family: var(--mono);
       font-size: 11px;
       color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .evento-card-pessoa {
-      font-size: 10px;
-      color: var(--muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
