@@ -228,77 +228,6 @@
       padding: 2px 4px;
     }
 
-    /* Match history expand */
-    tr.has-matches { cursor: pointer; }
-    tr.has-matches:hover td { background: rgba(0,229,255,.03) !important; }
-    .match-count-badge {
-      display: inline-block;
-      background: rgba(123,97,255,.2);
-      color: var(--accent2);
-      border-radius: 10px;
-      font-size: 10px;
-      font-family: var(--mono);
-      padding: 1px 6px;
-      margin-left: 5px;
-      vertical-align: middle;
-    }
-    tr.matches-row > td {
-      padding: 0 !important;
-      border-bottom: 2px solid var(--border) !important;
-    }
-    .matches-detail {
-      padding: 10px 14px 12px 60px;
-      background: rgba(123,97,255,.04);
-    }
-    .matches-detail-header {
-      font-size: 11px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-bottom: 8px;
-    }
-    .matches-inner {
-      border-collapse: collapse;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-    }
-    .matches-inner th {
-      padding: 5px 12px;
-      font-size: 10px;
-      text-align: left;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-    .matches-inner td {
-      padding: 6px 12px;
-      font-size: 12px;
-      font-family: var(--mono);
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    .matches-inner tbody tr:last-child td { border-bottom: none; }
-    .similarity-bar {
-      display: inline-block;
-      width: 60px;
-      height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      vertical-align: middle;
-      margin-left: 6px;
-      position: relative;
-      overflow: hidden;
-    }
-    .similarity-bar-fill {
-      position: absolute;
-      inset: 0 auto 0 0;
-      background: var(--accent2);
-      border-radius: 2px;
-    }
-
     /* Filter bar */
     .filter-bar {
       display: flex;
@@ -351,6 +280,112 @@
       display: none;
       z-index: 999;
     }
+
+    /* ---- Event Cards ---- */
+    .eventos-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 4px 0;
+    }
+    .eventos-empty {
+      color: var(--muted);
+      padding: 40px;
+      width: 100%;
+      text-align: center;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .evento-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .evento-card.single { width: 120px; }
+    .evento-card.dual   { width: 232px; }
+
+    .evento-photos {
+      display: flex;
+      gap: 1px;
+      background: var(--border);
+    }
+    .evento-photo-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #0a0c10;
+      min-width: 0;
+    }
+    .evento-photo-col img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+    }
+    .evento-photo-col img:hover { opacity: .88; }
+    .evento-photo-placeholder {
+      width: 100%;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--border);
+      font-size: 22px;
+      background: #0a0c10;
+    }
+    .evento-photo-ts {
+      padding: 3px 4px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+    .evento-card-body {
+      padding: 7px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+    }
+    .evento-card-cam {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      min-width: 0;
+    }
+    .evento-card-cam-id {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .evento-card-pessoa {
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .evento-card-metrics {
+      display: flex;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      margin-top: 1px;
+    }
+    .metric-o { color: var(--accent); }
+    .metric-r { color: var(--green); }
   </style>
 </head>
 <body>

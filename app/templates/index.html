@@ -76,27 +76,8 @@
       <button class="btn" id="btn-coletar" onclick="coletar()">⬇ Coletar Agora</button>
     </div>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Foto</th>
-          <th>Evento ID</th>
-          <th>Data/Hora</th>
-          <th>Pessoa</th>
-          <th>Nome</th>
-          <th>Câmera</th>
-          <th>Tipo</th>
-          <th>Score</th>
-          <th>Gênero</th>
-          <th>Faixa</th>
-          <th>Qualidade</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-eventos">
-        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
-      </tbody>
-    </table>
+  <div class="eventos-grid" id="eventos-grid">
+    <div class="eventos-empty">Carregando...</div>
   </div>
 </div>
 
@@ -138,6 +119,16 @@
       hour:'2-digit', minute:'2-digit', second:'2-digit'});
   }
 
+  function fmtTsCard(ts) {
+    if (!ts) return '<span style="color:var(--border)">—</span>';
+    const d = new Date(ts);
+    const date = d.toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo',
+      day:'2-digit', month:'2-digit', year:'2-digit'});
+    const time = d.toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    return `${date}<br>${time}`;
+  }
+
   function genderBadge(g) {
     if (!g) return '<span class="mono">—</span>';
     return `<span class="badge ${g.toLowerCase()}">${g}</span>`;
@@ -148,10 +139,10 @@
     try {
       const r = await fetch(BASE + '/api/status');
       const d = await r.json();
-      document.getElementById('stat-eventos').textContent   = d.stats.total_eventos ?? '—';
-      document.getElementById('stat-pessoas').textContent   = d.stats.total_pessoas ?? '—';
-      document.getElementById('stat-conhecidos').textContent= d.stats.deteccoes_conhecidas ?? '—';
-      document.getElementById('stat-novos').textContent     = d.stats.deteccoes_novas ?? '—';
+      document.getElementById('stat-eventos').textContent    = d.stats.total_eventos ?? '—';
+      document.getElementById('stat-pessoas').textContent    = d.stats.total_pessoas ?? '—';
+      document.getElementById('stat-conhecidos').textContent = d.stats.deteccoes_conhecidas ?? '—';
+      document.getElementById('stat-novos').textContent      = d.stats.deteccoes_novas ?? '—';
 
       const dot  = document.getElementById('sync-dot');
       const text = document.getElementById('sync-text');
@@ -163,48 +154,50 @@
     }
   }
 
-  // ---- Match history expand/collapse ----
-  let eventsData = [];
+  // ---- Card de evento ----
+  function photoCol(url, ts) {
+    const img = url
+      ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(url)}"
+             loading="lazy"
+             onclick="openImg(this.src)"
+             onerror="this.style.display='none'">`
+      : `<div class="evento-photo-placeholder">?</div>`;
+    return `<div class="evento-photo-col">${img}<div class="evento-photo-ts">${fmtTsCard(ts)}</div></div>`;
+  }
 
-  function toggleMatches(tr, idx) {
-    const next = tr.nextElementSibling;
-    if (next && next.classList.contains('matches-row')) {
-      next.remove();
-      return;
-    }
-    const e = eventsData[idx];
-    const qualLabel = e.face_quality != null
-      ? `Qualidade da captura: <strong style="color:var(--text)">${(e.face_quality * 100).toFixed(0)}%</strong> &nbsp;·&nbsp;`
+  function renderEventoCard(e) {
+    const bestMatch = e.matches && e.matches.length > 0 ? e.matches[0] : null;
+    const hasDual   = !!bestMatch;
+
+    const qualPct  = e.face_quality != null  ? (e.face_quality  * 100).toFixed(0) : null;
+    const matchPct = e.match_score  != null  ? (e.match_score   * 100).toFixed(0)
+                   : bestMatch && bestMatch.similarity != null ? (bestMatch.similarity * 100).toFixed(0)
+                   : null;
+
+    const typeBadge = e.match_type
+      ? `<span class="badge ${e.match_type}" style="font-size:9px;padding:1px 5px">${e.match_type}</span>`
       : '';
-    const rows = e.matches.map(m => {
-      const sim = m.similarity != null ? m.similarity : null;
-      const simPct = sim != null ? (sim * 100).toFixed(1) + '%' : '—';
-      const barFill = sim != null ? `<span class="similarity-bar"><span class="similarity-bar-fill" style="width:${(sim*100).toFixed(0)}%"></span></span>` : '';
-      const photo = m.face_image_url
-        ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(m.face_image_url)}"
-               style="width:40px;height:40px;object-fit:cover;border-radius:3px;border:1px solid var(--border);cursor:pointer;display:block"
-               onclick="openImg(this.src)" onerror="this.style.display='none'">`
-        : '<span style="color:var(--muted)">—</span>';
-      return `<tr>
-        <td style="padding:4px 10px">${photo}</td>
-        <td class="mono" style="color:var(--text)">${m.event_id_ref}</td>
-        <td>${fmtTs(m.timestamp_ref)}</td>
-        <td>${m.camera_id_ref || '—'}</td>
-        <td>${simPct}${barFill}</td>
-      </tr>`;
-    }).join('');
-    const detail = document.createElement('tr');
-    detail.className = 'matches-row';
-    detail.innerHTML = `<td colspan="11">
-      <div class="matches-detail">
-        <div class="matches-detail-header">${qualLabel}${e.matches.length} match(es) anterior(es)</div>
-        <table class="matches-inner">
-          <thead><tr><th>Foto</th><th>Evento Referência</th><th>Data/Hora</th><th>Câmera</th><th>Similaridade</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+
+    const pessoaLabel = e.pessoa_nome !== '—' ? e.pessoa_nome : (e.person_unique_id || '—');
+
+    return `
+    <div class="evento-card ${hasDual ? 'dual' : 'single'}">
+      <div class="evento-photos">
+        ${photoCol(e.face_image_url, e.timestamp_evento)}
+        ${hasDual ? photoCol(bestMatch.face_image_url, bestMatch.timestamp_ref) : ''}
       </div>
-    </td>`;
-    tr.after(detail);
+      <div class="evento-card-body">
+        <div class="evento-card-cam">
+          <span class="evento-card-cam-id">${e.camera_id || '—'}</span>
+          ${typeBadge}
+        </div>
+        <div class="evento-card-pessoa">${pessoaLabel}</div>
+        <div class="evento-card-metrics">
+          ${qualPct  != null ? `<span class="metric-o">O:${qualPct}%</span>`  : ''}
+          ${matchPct != null ? `<span class="metric-r">R:${matchPct}%</span>` : ''}
+        </div>
+      </div>
+    </div>`;
   }
 
   // ---- Filtros ----
@@ -272,15 +265,15 @@
 
   // ---- Eventos ----
   async function loadEventos() {
-    const tbody = document.getElementById('tbody-eventos');
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+    const grid = document.getElementById('eventos-grid');
+    grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
 
     const params = new URLSearchParams({ limit: 100 });
-    const dateFrom = document.getElementById('f-date-from')?.value;
-    const dateTo   = document.getElementById('f-date-to')?.value;
-    const pessoaId = document.getElementById('f-pessoa')?.value;
-    const storeId  = document.getElementById('f-estabelecimento')?.value;
-    const cameraId = document.getElementById('f-camera')?.value;
+    const dateFrom   = document.getElementById('f-date-from')?.value;
+    const dateTo     = document.getElementById('f-date-to')?.value;
+    const pessoaId   = document.getElementById('f-pessoa')?.value;
+    const storeId    = document.getElementById('f-estabelecimento')?.value;
+    const cameraId   = document.getElementById('f-camera')?.value;
     const hasMatches = document.getElementById('f-has-matches')?.checked;
     if (dateFrom)   params.set('date_from',   dateFrom);
     if (dateTo)     params.set('date_to',     dateTo);
@@ -292,38 +285,14 @@
     try {
       const r = await fetch(BASE + '/api/eventos?' + params);
       const d = await r.json();
-      eventsData = d.items;
       document.getElementById('eventos-count').textContent = `${d.total} eventos encontrados`;
       if (!d.items.length) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:32px">Nenhum evento encontrado</td></tr>';
+        grid.innerHTML = '<div class="eventos-empty">Nenhum evento encontrado</div>';
         return;
       }
-      tbody.innerHTML = d.items.map((e, idx) => {
-        const hasMatches = e.matches && e.matches.length > 0;
-        const matchBadge = hasMatches
-          ? `<span class="match-count-badge" title="Clique para ver histórico">${e.matches.length}</span>`
-          : '';
-        return `
-        <tr ${hasMatches ? `class="has-matches" onclick="toggleMatches(this, ${idx})" title="Clique para ver ${e.matches.length} match(es) anterior(es)"` : ''}>
-          <td style="padding:6px 10px">${e.face_image_url
-            ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(e.face_image_url)}"
-                   style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border)"
-                   onclick="event.stopPropagation();openImg(this.src)" onerror="this.style.display='none'">`
-            : '<span style="color:var(--muted)">—</span>'}</td>
-          <td class="mono">${e.event_id}</td>
-          <td class="mono">${fmtTs(e.timestamp_evento)}</td>
-          <td class="mono">${e.person_unique_id || '—'}</td>
-          <td>${e.pessoa_nome !== '—' ? `<strong>${e.pessoa_nome}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
-          <td class="mono">${e.camera_id || '—'}</td>
-          <td>${e.match_type ? `<span class="badge ${e.match_type}">${e.match_type}</span>${matchBadge}` : '—'}</td>
-          <td class="mono">${e.match_score != null ? (e.match_score * 100).toFixed(1) + '%' : '—'}</td>
-          <td>${genderBadge(e.genero_estimado)}</td>
-          <td class="mono">${e.faixa_etaria || '—'}</td>
-          <td class="mono">${e.face_quality != null ? (e.face_quality * 100).toFixed(0) + '%' : '—'}</td>
-        </tr>`;
-      }).join('');
+      grid.innerHTML = d.items.map(e => renderEventoCard(e)).join('');
     } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+      grid.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
     }
   }
 
@@ -406,7 +375,6 @@
   loadStatus();
   loadFiltroOptions().then(() => loadEventos());
   loadPessoas();
-  // Auto-refresh a cada 60s
   setInterval(() => { loadStatus(); loadEventos(); }, 60_000);
 </script>
 
