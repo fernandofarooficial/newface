@@ -247,7 +247,7 @@
     list.forEach(c => {
       const o = document.createElement('option');
       o.value = c.camera_id;
-      o.textContent = c.nome || c.camera_id;
+      o.textContent = c.camera_id;
       sel.appendChild(o);
     });
     if (list.some(c => c.camera_id === prev)) sel.value = prev;
