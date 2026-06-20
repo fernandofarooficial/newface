@@ -164,13 +164,11 @@
     return `<div class="evento-photo-col">${img}<div class="evento-photo-ts">${fmtTsCard(ts)}</div></div>`;
   }
 
-  function renderEventoCard(e) {
-    const bestMatch = e.matches && e.matches.length > 0 ? e.matches[0] : null;
-    const hasDual   = !!bestMatch;
-
+  // match: objeto match ou null (força ausência de foto de referência)
+  function renderEventoCard(e, match) {
     const qualPct  = e.face_quality != null ? (e.face_quality * 100).toFixed(0) : null;
     const matchPct = e.match_score  != null ? (e.match_score  * 100).toFixed(0)
-                   : bestMatch && bestMatch.similarity != null ? (bestMatch.similarity * 100).toFixed(0)
+                   : match && match.similarity != null ? (match.similarity * 100).toFixed(0)
                    : null;
 
     const typeBadge = e.match_type
@@ -178,10 +176,10 @@
       : '';
 
     return `
-    <div class="evento-card ${hasDual ? 'dual' : 'single'}">
+    <div class="evento-card ${match ? 'dual' : 'single'}">
       <div class="evento-photos">
         ${photoCol(e.face_image_url, e.timestamp_evento)}
-        ${hasDual ? photoCol(bestMatch.face_image_url, bestMatch.timestamp_ref) : ''}
+        ${match ? photoCol(match.face_image_url, match.timestamp_ref) : ''}
       </div>
       <div class="evento-card-body">
         <div class="evento-card-cam">
@@ -198,14 +196,25 @@
 
   // ---- Linha de pessoa ----
   function renderPessoaRow(item) {
-    const p    = item.pessoa;
-    const evs  = item.eventos;
+    const p   = item.pessoa;
+    const evs = item.eventos;
 
     const nome  = p.nome && p.nome !== '—' ? p.nome : 'Anônimo';
     const meta  = [p.genero_estimado, p.faixa_etaria].filter(Boolean).join(' · ');
     const count = p.total_deteccoes != null
       ? `${p.total_deteccoes} detecção(ões)`
       : `${evs.length} evento(s)`;
+
+    // URLs que já aparecem como foto principal: não devem ser repetidas como foto de match
+    const primaryUrls = new Set(evs.map(e => e.face_image_url).filter(Boolean));
+
+    const cardsHtml = evs.map(e => {
+      const best = e.matches && e.matches.length > 0 ? e.matches[0] : null;
+      // Mostra a foto de referência apenas se ela não é foto principal de nenhum outro card
+      const matchToShow = (best && best.face_image_url && !primaryUrls.has(best.face_image_url))
+        ? best : null;
+      return renderEventoCard(e, matchToShow);
+    }).join('');
 
     return `
     <div class="pessoa-row">
@@ -216,7 +225,7 @@
         <div class="pessoa-row-count">${count}</div>
       </div>
       <div class="pessoa-row-eventos">
-        ${evs.map(e => renderEventoCard(e)).join('')}
+        ${cardsHtml}
       </div>
     </div>`;
   }
