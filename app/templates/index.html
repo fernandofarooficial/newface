@@ -109,6 +109,15 @@
 </div>
 <!-- Tab: Tabuleiro -->
 <div id="tab-tabuleiro" class="tab-panel">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label class="filter-label">Câmera</label>
+      <select id="f-tab-camera" class="filter-select" onchange="loadTabuleiro(1)">
+        <option value="">Todas</option>
+      </select>
+    </div>
+  </div>
+
   <div class="toolbar">
     <span class="mono" id="tabuleiro-count">Carregando...</span>
     <button class="btn secondary" onclick="loadTabuleiro(tabuleiroPage)">↻ Atualizar</button>
@@ -278,6 +287,14 @@
       o.value = p.id;
       o.textContent = p.nome !== '—' ? `${p.nome} (${p.person_unique_id})` : p.person_unique_id;
       selPes.appendChild(o);
+    });
+
+    const selTabCam = document.getElementById('f-tab-camera');
+    allCameras.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.camera_id;
+      o.textContent = c.camera_id;
+      selTabCam.appendChild(o);
     });
   }
 
@@ -468,8 +485,14 @@
     tabuleiroPage = page;
     const grid = document.getElementById('tabuleiro-grid');
     grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
+
+    const params = new URLSearchParams();
+    params.set('page', page);
+    const cameraId = document.getElementById('f-tab-camera')?.value;
+    if (cameraId) params.set('camera_id', cameraId);
+
     try {
-      const r = await fetch(BASE + '/api/tabuleiro?page=' + page);
+      const r = await fetch(BASE + '/api/tabuleiro?' + params);
       const d = await r.json();
       document.getElementById('tabuleiro-count').textContent = `${d.total} pessoa(s)`;
       if (!d.items.length) {

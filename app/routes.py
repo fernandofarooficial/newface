@@ -251,8 +251,13 @@ def tabuleiro():
     page = max(int(request.args.get("page", 1)), 1)
     offset = (page - 1) * TABULEIRO_PER_PAGE
 
-    pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
-        .order_by(desc(Pessoa.ultima_deteccao))
+    pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))
+
+    camera_id = request.args.get("camera_id")
+    if camera_id:
+        pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id == camera_id))
+
+    pq = pq.order_by(desc(Pessoa.ultima_deteccao))
     total = pq.count()
     pessoas = pq.offset(offset).limit(TABULEIRO_PER_PAGE).all()
 
