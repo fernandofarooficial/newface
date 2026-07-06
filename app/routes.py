@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, asc
 from sqlalchemy.orm import subqueryload
 import requests as http_requests
 from requests.auth import HTTPBasicAuth
@@ -238,6 +238,61 @@ def pessoas_eventos():
         })
 
     return jsonify({"total": len(items), "items": items})
+
+
+# ------------------------------------------------------------------
+# API - Tabuleiro (primeira facial de cada pessoa, paginado)
+# ------------------------------------------------------------------
+TABULEIRO_PER_PAGE = 60
+
+
+@bp.route("/api/tabuleiro")
+def tabuleiro():
+    page = max(int(request.args.get("page", 1)), 1)
+    offset = (page - 1) * TABULEIRO_PER_PAGE
+
+    pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
+        .order_by(desc(Pessoa.ultima_deteccao))
+    total = pq.count()
+    pessoas = pq.offset(offset).limit(TABULEIRO_PER_PAGE).all()
+
+    pessoa_ids = [p.id for p in pessoas]
+    primeiras = {}
+    if pessoa_ids:
+        # Numera os eventos de cada pessoa por ordem cronológica para achar o primeiro (rn == 1)
+        rn = func.row_number().over(
+            partition_by=EventoFacial.pessoa_id,
+            order_by=asc(EventoFacial.timestamp_evento),
+        ).label("rn")
+        sub = db.session.query(
+            EventoFacial.pessoa_id.label("pessoa_id"),
+            EventoFacial.face_image_url.label("face_image_url"),
+            EventoFacial.timestamp_evento.label("timestamp_evento"),
+            rn,
+        ).filter(EventoFacial.pessoa_id.in_(pessoa_ids)).subquery()
+
+        rows = db.session.query(sub.c.pessoa_id, sub.c.face_image_url, sub.c.timestamp_evento)\
+            .filter(sub.c.rn == 1).all()
+        primeiras = {r.pessoa_id: r for r in rows}
+
+    items = []
+    for p in pessoas:
+        pf = primeiras.get(p.id)
+        items.append({
+            "pessoa": p.to_dict(),
+            "primeira_face_image_url": pf.face_image_url if pf else None,
+            "primeira_timestamp": pf.timestamp_evento.isoformat() if pf and pf.timestamp_evento else None,
+        })
+
+    total_pages = (total + TABULEIRO_PER_PAGE - 1) // TABULEIRO_PER_PAGE
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "per_page": TABULEIRO_PER_PAGE,
+        "total_pages": total_pages,
+        "items": items,
+    })
 
 
 # ------------------------------------------------------------------

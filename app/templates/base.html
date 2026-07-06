@@ -436,6 +436,82 @@
     }
     .metric-o { color: var(--accent); }
     .metric-r { color: var(--green); }
+
+    /* ---- Tabuleiro ---- */
+    .tabuleiro-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .tabuleiro-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .tabuleiro-card img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      cursor: pointer;
+      background: #06080c;
+      transition: opacity .12s;
+    }
+    .tabuleiro-card img:hover { opacity: .82; }
+    .tabuleiro-photo-placeholder {
+      width: 100%;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--border);
+      font-size: 28px;
+      background: #06080c;
+    }
+    .tabuleiro-card-body {
+      padding: 6px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .tabuleiro-card-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tabuleiro-card-nome {
+      font-size: 11px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tabuleiro-card-ts {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted);
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .pagination-info {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>

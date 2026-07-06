@@ -25,6 +25,7 @@
 <div class="tabs">
   <button class="tab-btn active" data-tab="eventos" onclick="switchTab('eventos')">Eventos Recentes</button>
   <button class="tab-btn" data-tab="pessoas" onclick="switchTab('pessoas')">Pessoas</button>
+  <button class="tab-btn" data-tab="tabuleiro" onclick="activateTabuleiro()">Tabuleiro</button>
 </div>
 
 <!-- Tab: Eventos -->
@@ -105,6 +106,17 @@
       </tbody>
     </table>
   </div>
+</div>
+<!-- Tab: Tabuleiro -->
+<div id="tab-tabuleiro" class="tab-panel">
+  <div class="toolbar">
+    <span class="mono" id="tabuleiro-count">Carregando...</span>
+    <button class="btn secondary" onclick="loadTabuleiro(tabuleiroPage)">↻ Atualizar</button>
+  </div>
+  <div class="tabuleiro-grid" id="tabuleiro-grid">
+    <div class="eventos-empty">Carregando...</div>
+  </div>
+  <div class="pagination" id="tabuleiro-pagination"></div>
 </div>
 {% endblock %}
 
@@ -399,6 +411,64 @@
     } finally {
       btn.disabled = false;
       btn.textContent = '⬇ Coletar Agora';
+    }
+  }
+
+  // ---- Tabuleiro ----
+  let tabuleiroPage = 1;
+  let tabuleiroLoaded = false;
+
+  function activateTabuleiro() {
+    switchTab('tabuleiro');
+    if (!tabuleiroLoaded) loadTabuleiro(1);
+  }
+
+  function tabuleiroCard(item) {
+    const p = item.pessoa;
+    const nome = p.nome && p.nome !== '—' ? p.nome : 'Anônimo';
+    const img = item.primeira_face_image_url
+      ? `<img src="${BASE}/api/face-image?path=${encodeURIComponent(item.primeira_face_image_url)}"
+             loading="lazy" onclick="openImg(this.src)" onerror="this.style.display='none'">`
+      : `<div class="tabuleiro-photo-placeholder">?</div>`;
+    return `
+    <div class="tabuleiro-card">
+      ${img}
+      <div class="tabuleiro-card-body">
+        <div class="tabuleiro-card-code">${p.person_unique_id || '—'}</div>
+        <div class="tabuleiro-card-nome">${nome}</div>
+        <div class="tabuleiro-card-ts">${fmtTsCard(item.primeira_timestamp)}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderTabuleiroPagination(page, totalPages) {
+    const el = document.getElementById('tabuleiro-pagination');
+    if (totalPages <= 1) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <button class="btn secondary" ${page <= 1 ? 'disabled' : ''} onclick="loadTabuleiro(${page - 1})">‹ Anterior</button>
+      <span class="pagination-info">Página ${page} de ${totalPages}</span>
+      <button class="btn secondary" ${page >= totalPages ? 'disabled' : ''} onclick="loadTabuleiro(${page + 1})">Próxima ›</button>
+    `;
+  }
+
+  async function loadTabuleiro(page) {
+    tabuleiroLoaded = true;
+    tabuleiroPage = page;
+    const grid = document.getElementById('tabuleiro-grid');
+    grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
+    try {
+      const r = await fetch(BASE + '/api/tabuleiro?page=' + page);
+      const d = await r.json();
+      document.getElementById('tabuleiro-count').textContent = `${d.total} pessoa(s)`;
+      if (!d.items.length) {
+        grid.innerHTML = '<div class="eventos-empty">Nenhuma pessoa encontrada</div>';
+        document.getElementById('tabuleiro-pagination').innerHTML = '';
+        return;
+      }
+      grid.innerHTML = d.items.map(tabuleiroCard).join('');
+      renderTabuleiroPagination(d.page, d.total_pages);
+    } catch(e) {
+      grid.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
     }
   }
 

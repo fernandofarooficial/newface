@@ -63,11 +63,35 @@ Six SQLAlchemy models all under schema `itumbiara` in database `lojas`:
 - `EventoFacial` → `EventoMatch` (one-to-many, cascade delete)
 - `SyncControl` — single-row audit log updated after every collection run
 
+`EventoFacial.to_dict(match_images=None)` takes a `{event_id: face_image_url}` lookup dict so callers can attach the photo of the *referenced* match event without an N+1 query — see `_build_event_filters`/`match_images` batching in `routes.py`.
+
+### Routes (`app/routes.py`)
+| Method | URL | Notes |
+|--------|-----|-------|
+| GET | `/` | Renders the dashboard (`index.html`) |
+| GET | `/api/status` | Sync status + aggregate stats (total eventos/pessoas, novos/conhecidos) |
+| GET | `/api/eventos` | Flat event list, filterable by `camera_id`, `store_id`, `match_type`, `pessoa_id`, `date_from`/`date_to`, `has_matches` |
+| GET | `/api/pessoas-eventos` | **Powers the "Eventos Recentes" tab.** Groups events by `Pessoa` (most-recently-detected person first, max 50 people, max 20 events each), reusing the same filters as `/api/eventos` via `_build_event_filters`. Each item is `{pessoa, eventos: [...]}` |
+| GET | `/api/pessoas` | Person list for the "Pessoas" tab and the person filter dropdown |
+| POST | `/api/pessoas/<id>/nome` | Inline-edit a person's display name from the dashboard |
+| POST | `/api/coletar` | Triggers `collect_events` synchronously (the "Coletar Agora" button) |
+| GET | `/api/cameras`, `/api/estabelecimentos` | Populate the filter dropdowns |
+| GET | `/api/face-image` | Auth proxy, see below |
+| GET | `/api/tabuleiro` | **Powers the "Tabuleiro" tab.** Paginated (60/page via `page` query param), one card per `Pessoa` ordered by `ultima_deteccao` desc. Returns each person's *first-ever* photo (`primeira_face_image_url`), found with a `ROW_NUMBER() OVER (PARTITION BY pessoa_id ORDER BY timestamp_evento ASC)` window query scoped to the current page's person IDs — avoids N+1 lookups |
+
 ### Face image proxy (`app/routes.py` — `/api/face-image`)
 The facial API requires Basic Auth even for image URLs. The proxy route validates that `path` starts with `/media/`, then fetches the image server-side with credentials and streams it back. The JS builds the `<img src>` using `BASE + '/api/face-image?path=' + encodeURIComponent(face_image_url)`.
 
+### Frontend (`app/templates/base.html`, `app/templates/index.html`)
+No build step and no separate JS/CSS files — `app/static/js` and `app/static/css` are empty; all styling and behaviour live inline in `<style>`/`<script>` blocks inside the templates. `index.html` renders three tabs:
+- **Eventos Recentes** — one row per person (`renderPessoaRow`), each showing that person's events as photo cards (`renderEventoCard`). A card is "dual" (shows two photos side by side) when its best match's `face_image_url` hasn't already been shown as a primary photo or as another card's match reference in the same row — this de-duplication (`primaryUrls`/`shownMatchUrls` sets in `renderPessoaRow`) is what the recent "card duplicado" bugfix commits target. Filters (date range, pessoa, estabelecimento, câmera, has-matches) re-query `/api/pessoas-eventos`.
+- **Pessoas** — flat table with inline name editing (`salvarNome` → `POST /api/pessoas/:id/nome`).
+- **Tabuleiro** — grid of one card per person (`tabuleiroCard`) showing their first-ever photo, paginated 60/page (`loadTabuleiro`/`renderTabuleiroPagination`). Lazy-loaded: `activateTabuleiro()` only fires the first `/api/tabuleiro` fetch when the tab is clicked, and each page change re-fetches just that page's 60 rows, so photos outside the visible page are never requested.
+
+Polling: `loadStatus()` + `loadEventos()` re-run every 60s via `setInterval`; this is independent of the server-side `FACIAL_POLL_SECS` collector interval.
+
 ### Configuration (`app/config.py`)
-All settings read from `.env` via `python-dotenv`. Key variables: `DB_HOST`, `DB_NAME` (`lojas`, lowercase), `DB_SCHEMA` (`itumbiara`), `FACIAL_API_BASE`, `FACIAL_POLL_SECS`. The SQLAlchemy URI passes `search_path` via the `options` query param.
+All settings read from `.env` via `python-dotenv`. Key variables: `DB_HOST`, `DB_NAME` (`lojas`, lowercase), `DB_SCHEMA` (`itumbiara`), `FACIAL_API_BASE`, `FACIAL_POLL_SECS`, `FACIAL_LIMIT` (events fetched per collector run), `FACIAL_MATCHES_LIM` (historical matches fetched per event). The SQLAlchemy URI passes `search_path` via the `options` query param. Every setting has a hardcoded fallback default (including DB/API credentials) if `.env` is missing — fine for this single-deployment app, but don't copy that pattern into a multi-environment project.
 
 ## Infrastructure
 
