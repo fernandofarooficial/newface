@@ -275,13 +275,6 @@ def tabuleiro():
             .filter(sub.c.rn == 1).all()
         primeiras = {r.pessoa_id: r for r in rows}
 
-    match_counts = {}
-    if pessoa_ids:
-        rows = db.session.query(EventoFacial.pessoa_id, func.count(EventoFacial.id))\
-            .filter(EventoFacial.pessoa_id.in_(pessoa_ids), EventoFacial.matched == True)\
-            .group_by(EventoFacial.pessoa_id).all()
-        match_counts = {pid: cnt for pid, cnt in rows}
-
     items = []
     for p in pessoas:
         pf = primeiras.get(p.id)
@@ -289,7 +282,6 @@ def tabuleiro():
             "pessoa": p.to_dict(),
             "primeira_face_image_url": pf.face_image_url if pf else None,
             "primeira_timestamp": pf.timestamp_evento.isoformat() if pf and pf.timestamp_evento else None,
-            "total_matches": match_counts.get(p.id, 0),
         })
 
     total_pages = (total + TABULEIRO_PER_PAGE - 1) // TABULEIRO_PER_PAGE

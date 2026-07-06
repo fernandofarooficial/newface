@@ -429,7 +429,7 @@
     const date = d.toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo',
       day:'2-digit', month:'2-digit', year:'2-digit'});
     const time = d.toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',
-      hour:'2-digit', minute:'2-digit'});
+      hour:'2-digit', minute:'2-digit', second:'2-digit'});
     return `${date} ${time}`;
   }
 
@@ -441,7 +441,6 @@
              loading="lazy" onclick="openImg(this.src)" onerror="this.style.display='none'">`
       : `<div class="tabuleiro-photo-placeholder">?</div>`;
     const eventos = p.total_deteccoes ?? 0;
-    const matches = item.total_matches ?? 0;
     return `
     <div class="tabuleiro-card">
       ${img}
@@ -449,7 +448,7 @@
         <div class="tabuleiro-card-code">${p.person_unique_id || '—'}</div>
         <div class="tabuleiro-card-nome">${nome}</div>
         <div class="tabuleiro-card-ts">${fmtTsTabuleiro(item.primeira_timestamp)}</div>
-        <div class="tabuleiro-card-count">${eventos} evento(s) · ${matches} match(es)</div>
+        <div class="tabuleiro-card-count">${eventos} evento(s)</div>
       </div>
     </div>`;
   }
