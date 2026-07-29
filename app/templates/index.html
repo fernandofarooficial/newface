@@ -112,20 +112,26 @@
   <div class="filter-bar">
     <div class="filter-group">
       <label class="filter-label">Câmera</label>
-      <select id="f-tab-camera" class="filter-select" onchange="loadTabuleiro(1)">
+      <select id="f-tab-camera" class="filter-select" onchange="loadTabuleiro()">
         <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Ordenar por</label>
+      <select id="f-tab-sort" class="filter-select" onchange="loadTabuleiro()">
+        <option value="ultima_deteccao">Última aparição</option>
+        <option value="primeira_deteccao">Criação da pessoa</option>
       </select>
     </div>
   </div>
 
   <div class="toolbar">
     <span class="mono" id="tabuleiro-count">Carregando...</span>
-    <button class="btn secondary" onclick="loadTabuleiro(tabuleiroPage)">↻ Atualizar</button>
+    <button class="btn secondary" onclick="loadTabuleiro()">↻ Atualizar</button>
   </div>
   <div class="tabuleiro-grid" id="tabuleiro-grid">
     <div class="eventos-empty">Carregando...</div>
   </div>
-  <div class="pagination" id="tabuleiro-pagination"></div>
 </div>
 {% endblock %}
 
@@ -432,12 +438,11 @@
   }
 
   // ---- Tabuleiro ----
-  let tabuleiroPage = 1;
   let tabuleiroLoaded = false;
 
   function activateTabuleiro() {
     switchTab('tabuleiro');
-    if (!tabuleiroLoaded) loadTabuleiro(1);
+    if (!tabuleiroLoaded) loadTabuleiro();
   }
 
   function fmtTsTabuleiro(ts) {
@@ -470,38 +475,27 @@
     </div>`;
   }
 
-  function renderTabuleiroPagination(page, totalPages) {
-    const el = document.getElementById('tabuleiro-pagination');
-    if (totalPages <= 1) { el.innerHTML = ''; return; }
-    el.innerHTML = `
-      <button class="btn secondary" ${page <= 1 ? 'disabled' : ''} onclick="loadTabuleiro(${page - 1})">‹ Anterior</button>
-      <span class="pagination-info">Página ${page} de ${totalPages}</span>
-      <button class="btn secondary" ${page >= totalPages ? 'disabled' : ''} onclick="loadTabuleiro(${page + 1})">Próxima ›</button>
-    `;
-  }
-
-  async function loadTabuleiro(page) {
+  async function loadTabuleiro() {
     tabuleiroLoaded = true;
-    tabuleiroPage = page;
     const grid = document.getElementById('tabuleiro-grid');
     grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
 
     const params = new URLSearchParams();
-    params.set('page', page);
     const cameraId = document.getElementById('f-tab-camera')?.value;
     if (cameraId) params.set('camera_id', cameraId);
+    const sort = document.getElementById('f-tab-sort')?.value;
+    if (sort) params.set('sort', sort);
 
     try {
       const r = await fetch(BASE + '/api/tabuleiro?' + params);
       const d = await r.json();
-      document.getElementById('tabuleiro-count').textContent = `${d.total} pessoa(s)`;
+      document.getElementById('tabuleiro-count').textContent =
+        d.total > d.items.length ? `${d.items.length} de ${d.total} pessoa(s)` : `${d.total} pessoa(s)`;
       if (!d.items.length) {
         grid.innerHTML = '<div class="eventos-empty">Nenhuma pessoa encontrada</div>';
-        document.getElementById('tabuleiro-pagination').innerHTML = '';
         return;
       }
       grid.innerHTML = d.items.map(tabuleiroCard).join('');
-      renderTabuleiroPagination(d.page, d.total_pages);
     } catch(e) {
       grid.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
     }

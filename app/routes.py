@@ -241,15 +241,19 @@ def pessoas_eventos():
 
 
 # ------------------------------------------------------------------
-# API - Tabuleiro (primeira facial de cada pessoa, paginado)
+# API - Tabuleiro (primeira facial de cada pessoa)
 # ------------------------------------------------------------------
-TABULEIRO_PER_PAGE = 60
+TABULEIRO_LIMIT = 120
+TABULEIRO_SORT_COLUMNS = {
+    "ultima_deteccao": Pessoa.ultima_deteccao,
+    "primeira_deteccao": Pessoa.primeira_deteccao,
+}
 
 
 @bp.route("/api/tabuleiro")
 def tabuleiro():
-    page = max(int(request.args.get("page", 1)), 1)
-    offset = (page - 1) * TABULEIRO_PER_PAGE
+    sort = request.args.get("sort", "ultima_deteccao")
+    sort_col = TABULEIRO_SORT_COLUMNS.get(sort, Pessoa.ultima_deteccao)
 
     pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))
 
@@ -257,9 +261,9 @@ def tabuleiro():
     if camera_id:
         pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id == camera_id))
 
-    pq = pq.order_by(desc(Pessoa.ultima_deteccao))
+    pq = pq.order_by(desc(sort_col))
     total = pq.count()
-    pessoas = pq.offset(offset).limit(TABULEIRO_PER_PAGE).all()
+    pessoas = pq.limit(TABULEIRO_LIMIT).all()
 
     pessoa_ids = [p.id for p in pessoas]
     primeiras = {}
@@ -289,13 +293,10 @@ def tabuleiro():
             "primeira_timestamp": pf.timestamp_evento.isoformat() if pf and pf.timestamp_evento else None,
         })
 
-    total_pages = (total + TABULEIRO_PER_PAGE - 1) // TABULEIRO_PER_PAGE
-
     return jsonify({
         "total": total,
-        "page": page,
-        "per_page": TABULEIRO_PER_PAGE,
-        "total_pages": total_pages,
+        "limit": TABULEIRO_LIMIT,
+        "sort": sort,
         "items": items,
     })
 
