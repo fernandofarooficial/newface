@@ -267,6 +267,74 @@
     .filter-input:focus, .filter-select:focus { outline: none; border-color: var(--accent); }
     .filter-actions { margin-left: auto; }
 
+    /* Multi-select dropdown (filtro de pessoas) */
+    .multiselect { position: relative; }
+    .multiselect-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+    .multiselect-btn::after { content: '▾'; color: var(--muted); font-size: 10px; }
+    .multiselect-panel {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      z-index: 50;
+      width: 240px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      padding: 8px;
+    }
+    .multiselect-search {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 12px;
+      padding: 5px 8px;
+      margin-bottom: 6px;
+    }
+    .multiselect-search:focus { outline: none; border-color: var(--accent); }
+    .multiselect-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 4px;
+    }
+    .multiselect-link {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .multiselect-options {
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .multiselect-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .multiselect-option:hover { background: rgba(255,255,255,.05); }
+    .multiselect-option input { accent-color: var(--accent2); cursor: pointer; }
+    .multiselect-empty { color: var(--muted); font-size: 12px; padding: 6px 4px; }
+
     #toast {
       position: fixed;
       bottom: 24px; right: 24px;

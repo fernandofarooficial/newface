@@ -42,9 +42,16 @@
     </div>
     <div class="filter-group">
       <label class="filter-label">Pessoa</label>
-      <select id="f-pessoa" class="filter-select" onchange="loadEventos()">
-        <option value="">Todas</option>
-      </select>
+      <div class="multiselect" id="f-pessoa-wrap">
+        <button type="button" class="filter-select multiselect-btn" id="f-pessoa-btn" onclick="togglePessoaDropdown()">Todas</button>
+        <div class="multiselect-panel" id="f-pessoa-panel" style="display:none">
+          <input type="text" class="multiselect-search" id="f-pessoa-search" placeholder="Buscar pessoa..." oninput="renderPessoaOptions()">
+          <div class="multiselect-actions">
+            <button type="button" class="multiselect-link" onclick="clearPessoaSelection()">Limpar seleção</button>
+          </div>
+          <div class="multiselect-options" id="f-pessoa-options"></div>
+        </div>
+      </div>
     </div>
     <div class="filter-group">
       <label class="filter-label">Estabelecimento</label>
@@ -266,6 +273,8 @@
 
   // ---- Filtros ----
   let allCameras = [];
+  let allPessoas = [];
+  const selectedPessoaIds = new Set();
 
   async function loadFiltroOptions() {
     const [rCam, rEst, rPes] = await Promise.all([
@@ -276,6 +285,7 @@
     allCameras = await rCam.json();
     const estabelecimentos = await rEst.json();
     const pessoasData = await rPes.json();
+    allPessoas = pessoasData.items || [];
 
     const selEst = document.getElementById('f-estabelecimento');
     estabelecimentos.forEach(e => {
@@ -286,14 +296,7 @@
     });
 
     filterCameras('');
-
-    const selPes = document.getElementById('f-pessoa');
-    (pessoasData.items || []).forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.nome !== '—' ? `${p.nome} (${p.person_unique_id})` : p.person_unique_id;
-      selPes.appendChild(o);
-    });
+    renderPessoaOptions();
 
     const selTabCam = document.getElementById('f-tab-camera');
     allCameras.forEach(c => {
@@ -302,6 +305,65 @@
       o.textContent = c.camera_id;
       selTabCam.appendChild(o);
     });
+  }
+
+  // ---- Filtro de pessoa (multi-seleção) ----
+  function pessoaLabel(p) {
+    return p.nome !== '—' ? `${p.nome} (${p.person_unique_id})` : p.person_unique_id;
+  }
+
+  function togglePessoaDropdown() {
+    const panel = document.getElementById('f-pessoa-panel');
+    const opening = panel.style.display === 'none';
+    panel.style.display = opening ? 'block' : 'none';
+    if (opening) document.getElementById('f-pessoa-search').focus();
+  }
+
+  document.addEventListener('click', (ev) => {
+    const wrap = document.getElementById('f-pessoa-wrap');
+    if (wrap && !wrap.contains(ev.target)) {
+      document.getElementById('f-pessoa-panel').style.display = 'none';
+    }
+  });
+
+  function renderPessoaOptions() {
+    const term = (document.getElementById('f-pessoa-search')?.value || '').toLowerCase();
+    const list = allPessoas.filter(p => pessoaLabel(p).toLowerCase().includes(term));
+    const el = document.getElementById('f-pessoa-options');
+    el.innerHTML = list.length
+      ? list.map(p => `
+          <label class="multiselect-option">
+            <input type="checkbox" value="${p.id}" ${selectedPessoaIds.has(String(p.id)) ? 'checked' : ''}
+                   onchange="onPessoaCheckChange('${p.id}', this.checked)">
+            ${pessoaLabel(p)}
+          </label>`).join('')
+      : '<div class="multiselect-empty">Nenhuma pessoa encontrada</div>';
+  }
+
+  function onPessoaCheckChange(id, checked) {
+    if (checked) selectedPessoaIds.add(id);
+    else selectedPessoaIds.delete(id);
+    updatePessoaBtnLabel();
+    loadEventos();
+  }
+
+  function clearPessoaSelection() {
+    selectedPessoaIds.clear();
+    renderPessoaOptions();
+    updatePessoaBtnLabel();
+    loadEventos();
+  }
+
+  function updatePessoaBtnLabel() {
+    const btn = document.getElementById('f-pessoa-btn');
+    if (selectedPessoaIds.size === 0) {
+      btn.textContent = 'Todas';
+    } else if (selectedPessoaIds.size === 1) {
+      const p = allPessoas.find(p => String(p.id) === [...selectedPessoaIds][0]);
+      btn.textContent = p ? pessoaLabel(p) : '1 selecionada';
+    } else {
+      btn.textContent = `${selectedPessoaIds.size} selecionadas`;
+    }
   }
 
   function filterCameras(estId) {
@@ -327,7 +389,9 @@
   function clearFiltros() {
     document.getElementById('f-date-from').value = '';
     document.getElementById('f-date-to').value = '';
-    document.getElementById('f-pessoa').value = '';
+    selectedPessoaIds.clear();
+    renderPessoaOptions();
+    updatePessoaBtnLabel();
     document.getElementById('f-estabelecimento').value = '';
     document.getElementById('f-has-matches').checked = false;
     filterCameras('');
@@ -343,13 +407,12 @@
     const params = new URLSearchParams();
     const dateFrom   = document.getElementById('f-date-from')?.value;
     const dateTo     = document.getElementById('f-date-to')?.value;
-    const pessoaId   = document.getElementById('f-pessoa')?.value;
     const storeId    = document.getElementById('f-estabelecimento')?.value;
     const cameraId   = document.getElementById('f-camera')?.value;
     const hasMatches = document.getElementById('f-has-matches')?.checked;
     if (dateFrom)   params.set('date_from',   dateFrom);
     if (dateTo)     params.set('date_to',     dateTo);
-    if (pessoaId)   params.set('pessoa_id',   pessoaId);
+    selectedPessoaIds.forEach(id => params.append('pessoa_id', id));
     if (storeId)    params.set('store_id',    storeId);
     if (cameraId)   params.set('camera_id',   cameraId);
     if (hasMatches) params.set('has_matches', '1');

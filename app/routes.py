@@ -70,9 +70,9 @@ def eventos():
     if match_type:
         q = q.filter(EventoFacial.match_type == match_type)
 
-    pessoa_id = request.args.get("pessoa_id")
-    if pessoa_id:
-        q = q.filter(EventoFacial.pessoa_id == pessoa_id)
+    pessoa_ids = request.args.getlist("pessoa_id")
+    if pessoa_ids:
+        q = q.filter(EventoFacial.pessoa_id.in_(pessoa_ids))
 
     date_from = request.args.get("date_from")
     if date_from:
@@ -203,14 +203,16 @@ def _build_event_filters(q):
 
 @bp.route("/api/pessoas-eventos")
 def pessoas_eventos():
-    pessoa_id = request.args.get("pessoa_id")
+    pessoa_ids = request.args.getlist("pessoa_id")
 
     # Seleciona as pessoas a exibir, ordenadas pela detecção mais recente
     pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
         .order_by(desc(Pessoa.ultima_deteccao))
-    if pessoa_id:
-        pq = pq.filter(Pessoa.id == pessoa_id)
-    pessoas = pq.limit(50).all()
+    if pessoa_ids:
+        pq = pq.filter(Pessoa.id.in_(pessoa_ids))
+        pessoas = pq.all()
+    else:
+        pessoas = pq.limit(50).all()
 
     items = []
     for p in pessoas:
