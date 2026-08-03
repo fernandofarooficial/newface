@@ -598,9 +598,12 @@
 <body>
   <header>
     <div class="logo">NEW<span>FACE</span></div>
-    <div id="sync-badge">
-      <div class="dot idle" id="sync-dot"></div>
-      <span id="sync-text">Aguardando...</span>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div id="sync-badge">
+        <div class="dot idle" id="sync-dot"></div>
+        <span id="sync-text">Aguardando...</span>
+      </div>
+      <a href="{{ url_for('main.logout') }}" class="btn secondary" style="text-decoration:none;font-size:12px;padding:6px 12px">Sair</a>
     </div>
   </header>
 

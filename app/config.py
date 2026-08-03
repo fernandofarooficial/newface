@@ -37,3 +37,10 @@ class Config:
 
     # App
     PORT = int(os.getenv("PORT", "5006"))
+
+    # Senhas de acesso -> câmeras liberadas ("*" = todas)
+    ACCESS_CODES = {
+        os.getenv("ACCESS_CODE_ALL",   "xt05"): "*",
+        os.getenv("ACCESS_CODE_CAM12", "9126"): ["cam_1", "cam_2"],
+        os.getenv("ACCESS_CODE_CAM5",  "4239"): ["cam_5"],
+    }

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 
-from flask import Blueprint, jsonify, render_template, request, current_app, Response
+from flask import Blueprint, jsonify, render_template, request, current_app, Response, session, redirect, url_for
 from sqlalchemy import func, desc, asc, or_
 from sqlalchemy.orm import subqueryload
 import requests as http_requests
@@ -11,6 +11,49 @@ from .collector import collect_events
 from .config import Config
 
 bp = Blueprint("main", __name__)
+
+PUBLIC_ENDPOINTS = {"main.login_page", "main.login_submit"}
+
+
+def _allowed_cameras():
+    """None = acesso a todas as câmeras; lista = câmeras liberadas para a sessão."""
+    scope = session.get("allowed_cameras", "*")
+    return None if scope == "*" else scope
+
+
+@bp.before_request
+def require_login():
+    if request.endpoint in PUBLIC_ENDPOINTS:
+        return
+    if not session.get("authenticated"):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "unauthorized"}), 401
+        return redirect(url_for("main.login_page"))
+
+
+# ------------------------------------------------------------------
+# Login (senha -> escopo de câmeras liberadas)
+# ------------------------------------------------------------------
+@bp.route("/login", methods=["GET"])
+def login_page():
+    return render_template("login.html", error=None)
+
+
+@bp.route("/login", methods=["POST"])
+def login_submit():
+    codigo = (request.form.get("codigo") or "").strip()
+    if codigo not in Config.ACCESS_CODES:
+        return render_template("login.html", error="Senha inválida"), 401
+
+    session["authenticated"] = True
+    session["allowed_cameras"] = Config.ACCESS_CODES[codigo]
+    return redirect(url_for("main.index"))
+
+
+@bp.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("main.login_page"))
 
 
 # ------------------------------------------------------------------
@@ -27,10 +70,20 @@ def index():
 @bp.route("/api/status")
 def status():
     sync = db.session.query(SyncControl).order_by(SyncControl.id.desc()).first()
-    total_eventos  = db.session.query(func.count(EventoFacial.id)).scalar()
-    total_pessoas  = db.session.query(func.count(Pessoa.id)).scalar()
-    total_novas    = db.session.query(func.count(EventoFacial.id)).filter(EventoFacial.match_type == "new").scalar()
-    total_conhecidas = db.session.query(func.count(EventoFacial.id)).filter(EventoFacial.match_type == "exact").scalar()
+    allowed = _allowed_cameras()
+
+    evt_q = db.session.query(EventoFacial)
+    if allowed is not None:
+        evt_q = evt_q.filter(EventoFacial.camera_id.in_(allowed))
+
+    total_eventos  = evt_q.with_entities(func.count(EventoFacial.id)).scalar()
+    total_novas    = evt_q.filter(EventoFacial.match_type == "new").with_entities(func.count(EventoFacial.id)).scalar()
+    total_conhecidas = evt_q.filter(EventoFacial.match_type == "exact").with_entities(func.count(EventoFacial.id)).scalar()
+
+    if allowed is None:
+        total_pessoas = db.session.query(func.count(Pessoa.id)).scalar()
+    else:
+        total_pessoas = evt_q.with_entities(func.count(func.distinct(EventoFacial.pessoa_id))).scalar()
 
     return jsonify({
         "sync": {
@@ -57,6 +110,10 @@ def eventos():
     offset = int(request.args.get("offset", 0))
 
     q = db.session.query(EventoFacial).options(subqueryload(EventoFacial.matches)).order_by(desc(EventoFacial.timestamp_evento))
+
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        q = q.filter(EventoFacial.camera_id.in_(allowed))
 
     camera_id = request.args.get("camera_id")
     if camera_id:
@@ -122,6 +179,10 @@ def pessoas():
 
     q = db.session.query(Pessoa).order_by(desc(Pessoa.ultima_deteccao))
 
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        q = q.filter(Pessoa.eventos.any(EventoFacial.camera_id.in_(allowed)))
+
     search = request.args.get("q", "").strip()
     if search:
         like = f"%{search}%"
@@ -145,6 +206,11 @@ def atualizar_nome(pessoa_id):
     p     = db.session.get(Pessoa, pessoa_id)
     if not p:
         return jsonify({"error": "Pessoa não encontrada"}), 404
+
+    allowed = _allowed_cameras()
+    if allowed is not None and not p.eventos.filter(EventoFacial.camera_id.in_(allowed)).first():
+        return jsonify({"error": "Pessoa não encontrada"}), 404
+
     p.nome = nome
     db.session.commit()
     return jsonify({"ok": True, "nome": p.nome})
@@ -164,7 +230,11 @@ def coletar():
 # ------------------------------------------------------------------
 @bp.route("/api/cameras")
 def cameras():
-    items = db.session.query(Camera).all()
+    allowed = _allowed_cameras()
+    q = db.session.query(Camera)
+    if allowed is not None:
+        q = q.filter(Camera.camera_id.in_(allowed))
+    items = q.all()
     return jsonify([c.to_dict() for c in items])
 
 
@@ -179,6 +249,9 @@ def estabelecimentos():
 # ------------------------------------------------------------------
 def _build_event_filters(q):
     """Aplica os filtros de evento comuns vindo da query string."""
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        q = q.filter(EventoFacial.camera_id.in_(allowed))
     camera_id = request.args.get("camera_id")
     if camera_id:
         q = q.filter(EventoFacial.camera_id == camera_id)
@@ -214,6 +287,9 @@ def pessoas_eventos():
     # Seleciona as pessoas a exibir, ordenadas pela detecção mais recente
     pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
         .order_by(desc(Pessoa.ultima_deteccao))
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id.in_(allowed)))
     if pessoa_ids:
         pq = pq.filter(Pessoa.id.in_(pessoa_ids))
         pessoas = pq.all()
@@ -265,6 +341,10 @@ def tabuleiro():
     offset = max(int(request.args.get("offset", 0)), 0)
 
     pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))
+
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id.in_(allowed)))
 
     camera_id = request.args.get("camera_id")
     if camera_id:

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NewFace – Acesso</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d0f14;
+      --surface: #13161e;
+      --border:  #1e2330;
+      --accent:  #00e5ff;
+      --red:     #ff4d6a;
+      --text:    #e2e8f0;
+      --muted:   #64748b;
+      --mono:    'IBM Plex Mono', monospace;
+      --sans:    'Inter', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 340px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 32px 28px;
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .logo span { color: var(--muted); font-weight: 400; }
+
+    .subtitle {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="password"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 16px;
+      letter-spacing: 0.1em;
+    }
+    input[type="password"]:focus { outline: none; border-color: var(--accent); }
+
+    .error {
+      color: var(--red);
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo">NEW<span>FACE</span></div>
+    <div class="subtitle">Informe a senha de acesso</div>
+    <form method="POST" action="{{ url_for('main.login_submit') }}" autocomplete="off">
+      <label for="codigo">Senha</label>
+      <input type="password" id="codigo" name="codigo" autofocus required>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+</body>
+</html>
