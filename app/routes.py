@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response
-from sqlalchemy import func, desc, asc
+from sqlalchemy import func, desc, asc, or_
 from sqlalchemy.orm import subqueryload
 import requests as http_requests
 from requests.auth import HTTPBasicAuth
@@ -121,6 +121,12 @@ def pessoas():
     offset = int(request.args.get("offset", 0))
 
     q = db.session.query(Pessoa).order_by(desc(Pessoa.ultima_deteccao))
+
+    search = request.args.get("q", "").strip()
+    if search:
+        like = f"%{search}%"
+        q = q.filter(or_(Pessoa.person_unique_id.ilike(like), Pessoa.nome.ilike(like)))
+
     total = q.count()
     items = q.offset(offset).limit(limit).all()
 
@@ -256,6 +262,7 @@ TABULEIRO_SORT_COLUMNS = {
 def tabuleiro():
     sort = request.args.get("sort", "ultima_deteccao")
     sort_col = TABULEIRO_SORT_COLUMNS.get(sort, Pessoa.ultima_deteccao)
+    offset = max(int(request.args.get("offset", 0)), 0)
 
     pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))
 
@@ -265,7 +272,7 @@ def tabuleiro():
 
     pq = pq.order_by(desc(sort_col))
     total = pq.count()
-    pessoas = pq.limit(TABULEIRO_LIMIT).all()
+    pessoas = pq.offset(offset).limit(TABULEIRO_LIMIT).all()
 
     pessoa_ids = [p.id for p in pessoas]
     primeiras = {}
@@ -298,6 +305,7 @@ def tabuleiro():
     return jsonify({
         "total": total,
         "limit": TABULEIRO_LIMIT,
+        "offset": offset,
         "sort": sort,
         "items": items,
     })
