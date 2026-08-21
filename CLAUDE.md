@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flask 3 app that polls a facial recognition API every 30 seconds and persists events to PostgreSQL. Exposes a dark-theme dashboard and a JSON REST API.
 
+Full database schema (tables, constraints, relationships, write flow, known gotchas) is documented separately in `DATABASE.md` — read that before writing migrations or touching `app/models.py`/`app/collector.py`.
+
 ## Commands
 
 **Run locally (Windows):**
@@ -34,7 +36,9 @@ systemctl restart newface          # gunicorn managed by systemd
 ```
 Logs: `/var/log/newface/app.log`, `/var/log/newface/access.log`
 
-**Database migrations:** run SQL files manually via psql or DBeaver:
+SSH access is preconfigured via the `camwatch-vps` host alias (`~/.ssh/config`, key `~/.ssh/id_ed25519_camwatch`, user `root`) — `ssh camwatch-vps` connects directly, no credentials to ask for. Always check `git log`/`systemctl status` on the VPS *before* pulling or restarting, to know what's already deployed.
+
+**Database migrations:** run SQL files manually via psql or DBeaver, in numeric order — see `DATABASE.md` for the full list and for the `NOT VALID` + `VALIDATE CONSTRAINT` pattern used by the FK/CHECK migrations (003+):
 ```bash
 psql -U fefa_dev -h localhost -d lojas -f migrations/002_add_face_image_url.sql
 ```
@@ -49,19 +53,23 @@ nginx strips the `/newface/` prefix before forwarding. `ProxyFix` middleware in 
 ### App factory (`app/__init__.py`)
 Creates the Flask app, applies `ProxyFix`, initialises SQLAlchemy, registers the blueprint, then starts an APScheduler `BackgroundScheduler` that fires `collect_events(app)` every `FACIAL_POLL_SECS` seconds (default 30). The scheduler runs in a daemon thread — gunicorn's `sync` worker class is required (async workers would break it).
 
+`gunicorn.conf.py` runs 2 workers, and each one calls `create_app()` independently — without a guard, each worker would start its own scheduler and every collection cycle would run twice in parallel (this actually happened in production; surfaced as paired timestamps in `sync_control` and occasional `UniqueViolation` on `event_id`). `_acquire_scheduler_lock()` fixes this: only the worker that wins an exclusive `flock` on `/tmp/newface_scheduler.lock` registers the APScheduler job; the rest still serve HTTP normally. On Windows (`os.name != "posix"`, always a single local process) the lock is skipped entirely.
+
 ### Collector (`app/collector.py`)
 Calls `GET /api/face-events` on the facial API with HTTP Basic Auth. For each event:
 - Skips if `event_id` already exists; backfills `face_image_url` if the existing row has it NULL.
 - Upserts `Pessoa` (person) with demographic data.
+- Auto-registers the camera in `cameras` via `_ensure_camera` if `camera_id` isn't cadastered yet — required because `eventos_faciais.camera_id` has a FK to `cameras.camera_id` (migration 003); without this, the first event from a not-yet-cadastered camera would fail to insert.
 - Inserts `EventoFacial` + child `EventoMatch` rows in a single transaction.
-- Updates `SyncControl` with the run summary.
+- Inserts a **new** `SyncControl` row per run (append-only history since migration 005) — see `DATABASE.md` for the full write flow and why this used to be overwrite-in-place.
 
 ### Models (`app/models.py`)
-Six SQLAlchemy models all under schema `itumbiara` in database `lojas`:
+Six SQLAlchemy models all under schema `itumbiara` in database `lojas`. Full column/constraint reference lives in `DATABASE.md` — summary:
 - `Estabelecimento` → `Camera` (one-to-many)
 - `Pessoa` → `EventoFacial` (one-to-many)
-- `EventoFacial` → `EventoMatch` (one-to-many, cascade delete)
-- `SyncControl` — single-row audit log updated after every collection run
+- `EventoFacial` → `EventoMatch` (one-to-many, cascade delete); `EventoFacial.camera_id` → `Camera.camera_id` (FK, migration 003)
+- `SyncControl` — append-only run history (one row per collection cycle, migration 005) — not a single-row audit log anymore
+- CHECK constraints (migration 004) bound `genero_estimado` (`male`/`female`/null), `match_score`/`face_quality`/`similarity` (`[0,1]`), and `SyncControl.status` (`idle`/`running`/`error`)
 
 `EventoFacial.to_dict(match_images=None)` takes a `{event_id: face_image_url}` lookup dict so callers can attach the photo of the *referenced* match event without an N+1 query — see `_build_event_filters`/`match_images` batching in `routes.py`.
 
@@ -105,6 +113,7 @@ All settings read from `.env` via `python-dotenv`. Key variables: `DB_HOST`, `DB
 | Component | Detail |
 |-----------|--------|
 | VPS / DB host | `72.60.58.241` — PostgreSQL runs on the same machine as the app |
+| SSH | `ssh camwatch-vps` (alias in `~/.ssh/config`, user `root`, key `~/.ssh/id_ed25519_camwatch`) |
 | DB | `lojas` (lowercase), schema `itumbiara`, user `fefa_dev` |
 | Facial API | `http://201.71.234.84:8000` — Basic Auth `admin / admin@facial26` |
 | Nginx config | `/etc/nginx/sites-enabled/apps` — `location /newface/` block |

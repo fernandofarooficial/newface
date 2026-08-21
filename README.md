@@ -2,6 +2,8 @@
 
 Aplicação Flask que coleta eventos da API Facial, persiste no PostgreSQL (schema `itumbiara`) e exibe um dashboard de monitoramento.
 
+Schema completo do banco (tabelas, constraints, fluxo de escrita, pegadinhas) está documentado em [`DATABASE.md`](./DATABASE.md).
+
 ---
 
 ## Stack
@@ -27,7 +29,7 @@ newface/
 │       ├── base.html
 │       └── index.html   # Dashboard
 ├── migrations/
-│   └── 001_create_tables.sql  # DDL – rodar no DBeaver
+│   └── 001...005_*.sql        # DDL – rodar no DBeaver, em ordem (ver DATABASE.md)
 ├── .env.example
 ├── .gitignore
 ├── gunicorn.conf.py
@@ -65,11 +67,7 @@ Acesse: http://localhost:5006
 
 ## 2. Banco de dados
 
-Execute o DDL no DBeaver:
-
-```
-migrations/001_create_tables.sql
-```
+Execute os arquivos de `migrations/` no DBeaver/psql, em ordem numérica (001 a 005). Detalhes de cada um, o schema completo e o padrão `NOT VALID` + `VALIDATE CONSTRAINT` usado pelas migrations 003/004 estão em [`DATABASE.md`](./DATABASE.md).
 
 Conexão:
 - Host: `72.60.58.241`

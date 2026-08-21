@@ -147,6 +147,8 @@ Ocorrências anteriores da mesma pessoa que vieram junto no payload do evento (`
 ### `sync_control`
 Histórico de execuções do collector — **append-only desde a migration 005**: cada ciclo de coleta insere uma linha nova (`status="running"` no início, atualizada para `idle`/`error` no fim da mesma execução) em vez de reaproveitar/sobrescrever a última. `GET /api/status` continua lendo só a mais recente (`ORDER BY id DESC LIMIT 1`), mas agora dá pra consultar o histórico completo (`idx_sync_control_criado_em`).
 
+Antes de 2026-08-20 esse histórico podia ter linhas "em par" (dois `criado_em` quase idênticos) porque `gunicorn.conf.py` sobe 2 workers e cada um iniciava seu próprio `BackgroundScheduler` — o mesmo ciclo rodava duas vezes em paralelo. Corrigido em `app/__init__.py` (`_acquire_scheduler_lock`, flock exclusivo por processo); ver "Coisas não óbvias" abaixo.
+
 | Coluna | Tipo | Notas |
 |--------|------|-------|
 | `id` | SERIAL PK | |
@@ -176,3 +178,4 @@ Para um total acumulado histórico, agregue com `SUM(total_inseridos)`/`SUM(tota
 - **Dados demográficos existem em dois lugares** (`pessoas.genero_estimado`/`faixa_etaria` vs `eventos_faciais.genero_estimado`/`faixa_etaria`): o de `pessoas` é "melhor palpite consolidado, primeiro valor não-nulo vence"; o de `eventos_faciais` é o snapshot daquele evento específico. Não espere que sejam sempre iguais.
 - **`match_type` não tem CHECK constraint de propósito.** Ao contrário de gênero/status, o domínio de valores que a API Facial pode mandar em `match_type` não é garantido só `exact`/`new` para sempre; travar isso no banco arriscaria descartar eventos legítimos se a API mudar.
 - **`nome` em `pessoas` é o único campo editável pelo usuário** via UI; todo o resto vem só da API/collector.
+- **`collect_events` só roda em um processo por vez**, mesmo com múltiplos workers do gunicorn. `create_app()` (`app/__init__.py`) só registra o job do APScheduler no worker que conseguir um `flock` exclusivo em `/tmp/newface_scheduler.lock`; os outros workers seguem servindo HTTP normalmente, só não agendam a coleta. No Windows local (sempre processo único) isso é pulado. Sem esse lock, dois workers rodando o mesmo ciclo ao mesmo tempo causavam `UniqueViolation` esporádico ao inserir `event_id` e dobravam as chamadas à API Facial.
