@@ -49,6 +49,22 @@ def _get_estabelecimento_id(session, store_id: int) -> int | None:
     return est.id if est else None
 
 
+def _ensure_camera(session, camera_id: str, estabelecimento_id: int | None) -> None:
+    """Cria um cadastro mínimo em `cameras` para câmeras novas vistas pela API.
+
+    Necessário porque eventos_faciais.camera_id passou a ter FK para
+    cameras.camera_id (migrations/003) — sem isso, o primeiro evento de uma
+    câmera ainda não cadastrada manualmente falharia ao inserir.
+    """
+    if not camera_id or estabelecimento_id is None:
+        return
+    exists = session.query(Camera).filter_by(camera_id=camera_id).first()
+    if not exists:
+        session.add(Camera(camera_id=camera_id, estabelecimento_id=estabelecimento_id, nome=camera_id))
+        session.flush()
+        logger.info(f"Câmera registrada automaticamente: {camera_id}")
+
+
 def _parse_ts(ts_str: str):
     if not ts_str:
         return None
@@ -72,12 +88,9 @@ def collect_events(app) -> dict:
     result = {"inseridos": 0, "ignorados": 0, "erros": 0}
 
     with app.app_context():
-        sync = db.session.query(SyncControl).order_by(SyncControl.id.desc()).first()
-        if not sync:
-            sync = SyncControl(status="running")
-            db.session.add(sync)
-        else:
-            sync.status = "running"
+        # Uma linha nova por execução (histórico), não reaproveita a última.
+        sync = SyncControl(status="running")
+        db.session.add(sync)
         db.session.commit()
 
         try:
@@ -123,6 +136,7 @@ def collect_events(app) -> dict:
                     pessoa.total_deteccoes = (pessoa.total_deteccoes or 0) + 1
 
                 est_id = _get_estabelecimento_id(db.session, ev.get("store_id"))
+                _ensure_camera(db.session, ev.get("camera_id"), est_id)
 
                 evento = EventoFacial(
                     event_id           = event_id,
@@ -168,8 +182,8 @@ def collect_events(app) -> dict:
                 result["erros"] += 1
 
         sync.ultimo_sync     = datetime.now(timezone.utc)
-        sync.total_inseridos = (sync.total_inseridos or 0) + result["inseridos"]
-        sync.total_ignorados = (sync.total_ignorados or 0) + result["ignorados"]
+        sync.total_inseridos = result["inseridos"]
+        sync.total_ignorados = result["ignorados"]
         sync.status          = "idle"
         sync.mensagem        = f"Última coleta: {result['inseridos']} novos, {result['ignorados']} ignorados"
         db.session.commit()
