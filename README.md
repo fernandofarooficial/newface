@@ -187,6 +187,7 @@ git push -u origin main
 | GET | `/api/pessoas?limit=50` | Pessoas identificadas |
 | POST | `/api/pessoas/:id/nome` | Atualizar nome de uma pessoa |
 | POST | `/api/coletar` | Disparar coleta manual |
+| POST | `/api/reset-base` | **Destrutivo.** Apaga todos os eventos e pessoas (`TRUNCATE ... RESTART IDENTITY CASCADE`); exige sessão com acesso total (senha `ACCESS_CODE_ALL`), retorna `403` caso contrário |
 | GET | `/api/cameras` | Câmeras cadastradas |
 | GET | `/api/estabelecimentos` | Estabelecimentos |
 
