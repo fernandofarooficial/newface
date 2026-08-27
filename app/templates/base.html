@@ -201,6 +201,10 @@
       color: var(--muted);
       border: 1px solid var(--border);
     }
+    .btn.danger {
+      background: #ff3b3b;
+      color: #fff;
+    }
 
     /* Editar nome */
     .nome-cell {
@@ -603,6 +607,9 @@
         <div class="dot idle" id="sync-dot"></div>
         <span id="sync-text">Aguardando...</span>
       </div>
+      {% if session.get('allowed_cameras', '*') == '*' %}
+      <button class="btn danger" id="btn-reset-base" onclick="resetBase()" style="font-size:12px;padding:6px 12px">⚠ Reset Base</button>
+      {% endif %}
       <a href="{{ url_for('main.logout') }}" class="btn secondary" style="text-decoration:none;font-size:12px;padding:6px 12px">Sair</a>
     </div>
   </header>
@@ -625,6 +632,25 @@
     function switchTab(name) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+    }
+
+    async function resetBase() {
+      if (!confirm('Tem certeza que deseja resetar a base? Isso vai APAGAR PERMANENTEMENTE todos os eventos e pessoas cadastrados. Essa ação não pode ser desfeita.')) return;
+
+      const btn = document.getElementById('btn-reset-base');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Resetando...';
+      try {
+        const r = await fetch(BASE + '/api/reset-base', {method: 'POST'});
+        if (!r.ok) throw new Error('Falha ao resetar');
+        showToast('Base resetada com sucesso', '#ff3b3b');
+        setTimeout(() => location.reload(), 800);
+      } catch (e) {
+        showToast('Erro ao resetar a base', '#ff3b3b');
+        btn.disabled = false;
+        btn.textContent = original;
+      }
     }
   </script>
   {% block scripts %}{% endblock %}

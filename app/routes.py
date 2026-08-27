@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response, session, redirect, url_for
-from sqlalchemy import func, desc, asc, or_
+from sqlalchemy import func, desc, asc, or_, text
 from sqlalchemy.orm import subqueryload
 import requests as http_requests
 from requests.auth import HTTPBasicAuth
@@ -223,6 +223,21 @@ def atualizar_nome(pessoa_id):
 def coletar():
     result = collect_events(current_app._get_current_object())
     return jsonify(result)
+
+
+# ------------------------------------------------------------------
+# API - Reset da base (apaga eventos e pessoas)
+# ------------------------------------------------------------------
+@bp.route("/api/reset-base", methods=["POST"])
+def reset_base():
+    if _allowed_cameras() is not None:
+        return jsonify({"error": "unauthorized"}), 403
+
+    db.session.execute(text(
+        "TRUNCATE TABLE itumbiara.eventos_faciais, itumbiara.pessoas RESTART IDENTITY CASCADE"
+    ))
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------------
