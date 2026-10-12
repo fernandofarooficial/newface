@@ -191,6 +191,8 @@ git push -u origin main
 | GET | `/api/cameras` | Câmeras cadastradas |
 | GET | `/api/estabelecimentos` | Estabelecimentos |
 
+> O estabelecimento de cada evento vem do cadastro de câmeras (`cameras.estabelecimento_id`), não do `store_id` enviado pela API Facial, que não bate com o cadastro. O filtro `store_id` de `/api/eventos` e `/api/pessoas-eventos` também filtra pelas câmeras do estabelecimento. Detalhes em `DATABASE.md`.
+
 ---
 
 ## 6. Variáveis de ambiente

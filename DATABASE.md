@@ -114,7 +114,7 @@ Um registro por evento de detecção/reconhecimento recebido da API Facial.
 | `pessoa_id` | INTEGER → `pessoas.id`, nullable | |
 | `person_unique_id` | VARCHAR(20) | Redundante com `pessoas.person_unique_id`, guardado aqui para joins rápidos |
 | `camera_id` | VARCHAR(20) | FK → `cameras.camera_id` (migration 003, `NOT VALID`) |
-| `estabelecimento_id` | INTEGER → `estabelecimentos.id`, nullable | |
+| `estabelecimento_id` | INTEGER → `estabelecimentos.id`, nullable | Copiado de `cameras.estabelecimento_id` da câmera do evento (não do `store_id` da API) — ver "Coisas não óbvias" |
 | `person_track_id` | VARCHAR(40) | |
 | `matched` | BOOLEAN | `true` = pessoa já existia na base; `false` = pessoa nova |
 | `match_score` | NUMERIC(5,4) | Similaridade 0.0000–1.0000 (CHECK `chk_ef_match_score` em `[0,1]`, migration 004) |
@@ -138,7 +138,7 @@ Ocorrências anteriores da mesma pessoa que vieram junto no payload do evento (`
 | `event_id_ref` | VARCHAR(40) NOT NULL | `event_id` do evento anterior referenciado — **pode não existir** na tabela `eventos_faciais` (evento fora da janela coletada) |
 | `timestamp_ref` | TIMESTAMPTZ | |
 | `camera_id_ref` | VARCHAR(20) | |
-| `store_id_ref` | INTEGER | |
+| `store_id_ref` | INTEGER | Valor cru do `store_id` da API — **não confiável** (não bate com o cadastro de câmeras); nada filtra por ele |
 | `similarity` | NUMERIC(5,4) | CHECK `chk_em_similarity` em `[0,1]`, migration 004 |
 | `criado_em` | TIMESTAMPTZ | |
 
@@ -168,7 +168,7 @@ Para um total acumulado histórico, agregue com `SUM(total_inseridos)`/`SUM(tota
 2. `GET {FACIAL_API_BASE}/api/face-events?limit=...&matches_limit=...` (Basic Auth).
 3. Para cada evento do payload:
    - Se `event_id` já existe em `eventos_faciais` → conta como **ignorado**; se a linha existente não tinha `face_image_url` e o payload trouxe uma, faz backfill.
-   - Senão: resolve/cria `Pessoa` por `person_unique_id` (dados demográficos só preenchem campos vazios, nunca sobrescrevem); atualiza `primeira_deteccao`/`ultima_deteccao`/`total_deteccoes` da pessoa; resolve `estabelecimento_id` por `store_id`; **auto-registra a câmera em `cameras` se `camera_id` ainda não existir** (`_ensure_camera`, necessário para a FK da migration 003); insere `EventoFacial`; insere um `EventoMatch` por item de `recognition.matches`; commit por evento (rollback isolado se um evento falhar, sem abortar o lote).
+   - Senão: resolve/cria `Pessoa` por `person_unique_id` (dados demográficos só preenchem campos vazios, nunca sobrescrevem); atualiza `primeira_deteccao`/`ultima_deteccao`/`total_deteccoes` da pessoa; resolve `estabelecimento_id` pela câmera cadastrada (`cameras.estabelecimento_id`); se a câmera ainda não existe, usa o `store_id` da API e **auto-registra a câmera em `cameras`** com esse estabelecimento (`_ensure_camera`, necessário para a FK da migration 003); insere `EventoFacial`; insere um `EventoMatch` por item de `recognition.matches`; commit por evento (rollback isolado se um evento falhar, sem abortar o lote).
 4. Ao final, atualiza a mesma linha de `sync_control` desta execução com os totais **deste ciclo**, `ultimo_event_id`, `ultimo_sync` e `status="idle"` (ou `"error"` se a chamada à API falhou).
 
 ## Coisas não óbvias / pegadinhas
@@ -177,6 +177,7 @@ Para um total acumulado histórico, agregue com `SUM(total_inseridos)`/`SUM(tota
 - **`evento_matches.event_id_ref` pode "apontar para o nada".** A API manda matches contra eventos fora da janela `limit`/`matches_limit` coletada; `routes.py` trata isso fazendo lookup best-effort, não assume que sempre existe. Isso é normal e não indexado à parte — não há query que filtre `evento_matches` por esse campo, só o caminho inverso (`eventos_faciais.event_id IN (...)`, já coberto pelo `UNIQUE`).
 - **Dados demográficos existem em dois lugares** (`pessoas.genero_estimado`/`faixa_etaria` vs `eventos_faciais.genero_estimado`/`faixa_etaria`): o de `pessoas` é "melhor palpite consolidado, primeiro valor não-nulo vence"; o de `eventos_faciais` é o snapshot daquele evento específico. Não espere que sejam sempre iguais.
 - **`match_type` não tem CHECK constraint de propósito.** Ao contrário de gênero/status, o domínio de valores que a API Facial pode mandar em `match_type` não é garantido só `exact`/`new` para sempre; travar isso no banco arriscaria descartar eventos legítimos se a API mudar.
+- **O `store_id` da API Facial não é confiável — o cadastro de `cameras` é a fonte de verdade do estabelecimento.** A API reporta câmeras sob estabelecimentos errados (ex: `cam_5` vinha como store 1, mas pertence ao Condomínio; `cam_8`/`cam_9` vinham como Condomínio, mas são de Porto Alegre). Até 2026-10-12 o collector gravava esse valor direto em `eventos_faciais.estabelecimento_id`, o que fazia o filtro Estabelecimento da tela Eventos Recentes trazer eventos de outras câmeras. Corrigido em três frentes: (1) o collector passou a copiar `cameras.estabelecimento_id`; (2) os filtros `store_id` de `/api/eventos` e `/api/pessoas-eventos` filtram por `camera_id IN (câmeras do estabelecimento)` (`_store_cameras_filter` em `routes.py`); (3) os 115 eventos antigos foram realinhados em produção com `UPDATE itumbiara.eventos_faciais e SET estabelecimento_id = c.estabelecimento_id FROM itumbiara.cameras c WHERE c.camera_id = e.camera_id AND e.estabelecimento_id IS DISTINCT FROM c.estabelecimento_id`. Se uma câmera mudar de estabelecimento no cadastro, rode esse mesmo `UPDATE` para realinhar os eventos dela. Câmeras novas são auto-registradas com o `store_id` da API — confira o estabelecimento delas no cadastro.
 - **`nome` em `pessoas` é o único campo editável pelo usuário** via UI; todo o resto vem só da API/collector.
 - **`collect_events` só roda em um processo por vez**, mesmo com múltiplos workers do gunicorn. `create_app()` (`app/__init__.py`) só registra o job do APScheduler no worker que conseguir um `flock` exclusivo em `/tmp/newface_scheduler.lock`; os outros workers seguem servindo HTTP normalmente, só não agendam a coleta. No Windows local (sempre processo único) isso é pulado. Sem esse lock, dois workers rodando o mesmo ciclo ao mesmo tempo causavam `UniqueViolation` esporádico ao inserir `event_id` e dobravam as chamadas à API Facial.
 - **`POST /api/reset-base`** (botão "Reset Base" no header, só visível/permitido para a sessão com acesso total) roda `TRUNCATE itumbiara.eventos_faciais, itumbiara.pessoas RESTART IDENTITY CASCADE`. O `CASCADE` também esvazia `evento_matches` (FK para `eventos_faciais`) e o `RESTART IDENTITY` zera as sequences de `id` das três tabelas — a próxima pessoa/evento inserido volta a começar do `id=1`. `cameras`, `estabelecimentos` e `sync_control` **não** são tocados, então o histórico de execuções do collector sobrevive ao reset. Não há como desfazer — não existe soft-delete nem backup automático antes do truncate.
