@@ -118,6 +118,12 @@
 <div id="tab-tabuleiro" class="tab-panel">
   <div class="filter-bar">
     <div class="filter-group">
+      <label class="filter-label">Estabelecimento</label>
+      <select id="f-tab-estabelecimento" class="filter-select" onchange="onTabEstabelecimentoChange()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group">
       <label class="filter-label">Câmera</label>
       <select id="f-tab-camera" class="filter-select" onchange="loadTabuleiro(0)">
         <option value="">Todas</option>
@@ -288,24 +294,19 @@
     allCameras = await rCam.json();
     const estabelecimentos = await rEst.json();
 
-    const selEst = document.getElementById('f-estabelecimento');
-    estabelecimentos.forEach(e => {
-      const o = document.createElement('option');
-      o.value = e.id;
-      o.textContent = e.nome;
-      selEst.appendChild(o);
+    ['f-estabelecimento', 'f-tab-estabelecimento'].forEach(selId => {
+      const selEst = document.getElementById(selId);
+      estabelecimentos.forEach(e => {
+        const o = document.createElement('option');
+        o.value = e.id;
+        o.textContent = e.nome;
+        selEst.appendChild(o);
+      });
     });
 
     filterCameras('');
+    filterCameras('', 'f-tab-camera');
     await searchPessoas('');
-
-    const selTabCam = document.getElementById('f-tab-camera');
-    allCameras.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.camera_id;
-      o.textContent = c.camera_id;
-      selTabCam.appendChild(o);
-    });
   }
 
   // ---- Filtro de pessoa (busca no servidor + multi-seleção) ----
@@ -387,8 +388,8 @@
     }
   }
 
-  function filterCameras(estId) {
-    const sel = document.getElementById('f-camera');
+  function filterCameras(estId, selId = 'f-camera') {
+    const sel = document.getElementById(selId);
     const prev = sel.value;
     sel.innerHTML = '<option value="">Todas</option>';
     const list = estId ? allCameras.filter(c => String(c.estabelecimento_id) === String(estId)) : allCameras;
@@ -405,6 +406,12 @@
     filterCameras(document.getElementById('f-estabelecimento').value);
     document.getElementById('f-camera').value = '';
     loadEventos();
+  }
+
+  function onTabEstabelecimentoChange() {
+    filterCameras(document.getElementById('f-tab-estabelecimento').value, 'f-tab-camera');
+    document.getElementById('f-tab-camera').value = '';
+    loadTabuleiro(0);
   }
 
   function clearFiltros() {
@@ -569,6 +576,8 @@
     grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
 
     const params = new URLSearchParams();
+    const storeId = document.getElementById('f-tab-estabelecimento')?.value;
+    if (storeId) params.set('store_id', storeId);
     const cameraId = document.getElementById('f-tab-camera')?.value;
     if (cameraId) params.set('camera_id', cameraId);
     const sort = document.getElementById('f-tab-sort')?.value;

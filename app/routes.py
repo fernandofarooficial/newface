@@ -376,6 +376,10 @@ def tabuleiro():
     if camera_id:
         pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id == camera_id))
 
+    store_id = request.args.get("store_id")
+    if store_id:
+        pq = pq.filter(Pessoa.eventos.any(_store_cameras_filter(store_id)))
+
     pq = pq.order_by(desc(sort_col))
     total = pq.count()
     pessoas = pq.offset(offset).limit(TABULEIRO_LIMIT).all()
