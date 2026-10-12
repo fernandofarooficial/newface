@@ -135,8 +135,14 @@ def collect_events(app) -> dict:
                         pessoa.ultima_deteccao = ts
                     pessoa.total_deteccoes = (pessoa.total_deteccoes or 0) + 1
 
-                est_id = _get_estabelecimento_id(db.session, ev.get("store_id"))
-                _ensure_camera(db.session, ev.get("camera_id"), est_id)
+                # O cadastro de câmeras é a fonte de verdade do estabelecimento;
+                # o store_id da API só é usado para câmeras ainda não cadastradas.
+                cam = db.session.query(Camera).filter_by(camera_id=ev.get("camera_id")).first()
+                if cam:
+                    est_id = cam.estabelecimento_id
+                else:
+                    est_id = _get_estabelecimento_id(db.session, ev.get("store_id"))
+                    _ensure_camera(db.session, ev.get("camera_id"), est_id)
 
                 evento = EventoFacial(
                     event_id           = event_id,
