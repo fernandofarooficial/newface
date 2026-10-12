@@ -101,6 +101,17 @@ def status():
     })
 
 
+def _store_cameras_filter(store_id):
+    """Filtra eventos pelas câmeras cadastradas no estabelecimento.
+
+    Usa `cameras.estabelecimento_id` (mesma fonte do dropdown de câmeras) em vez
+    de `eventos_faciais.estabelecimento_id`, que vem do `store_id` da API Facial
+    e não bate com o cadastro das câmeras.
+    """
+    cams = db.session.query(Camera.camera_id).filter(Camera.estabelecimento_id == store_id)
+    return EventoFacial.camera_id.in_(cams.scalar_subquery())
+
+
 # ------------------------------------------------------------------
 # API - Eventos recentes
 # ------------------------------------------------------------------
@@ -121,7 +132,7 @@ def eventos():
 
     store_id = request.args.get("store_id")
     if store_id:
-        q = q.filter(EventoFacial.estabelecimento_id == store_id)
+        q = q.filter(_store_cameras_filter(store_id))
 
     match_type = request.args.get("match_type")
     if match_type:
@@ -272,7 +283,7 @@ def _build_event_filters(q):
         q = q.filter(EventoFacial.camera_id == camera_id)
     store_id = request.args.get("store_id")
     if store_id:
-        q = q.filter(EventoFacial.estabelecimento_id == store_id)
+        q = q.filter(_store_cameras_filter(store_id))
     match_type = request.args.get("match_type")
     if match_type:
         q = q.filter(EventoFacial.match_type == match_type)
