@@ -26,6 +26,7 @@
   <button class="tab-btn active" data-tab="eventos" onclick="switchTab('eventos')">Eventos Recentes</button>
   <button class="tab-btn" data-tab="pessoas" onclick="switchTab('pessoas')">Pessoas</button>
   <button class="tab-btn" data-tab="tabuleiro" onclick="activateTabuleiro()">Tabuleiro</button>
+  <button class="tab-btn" data-tab="duplicatas" onclick="activateDuplicatas()">Duplicatas</button>
 </div>
 
 <!-- Tab: Eventos -->
@@ -99,6 +100,7 @@
     <table>
       <thead>
         <tr>
+          <th></th>
           <th>ID</th>
           <th>Nome</th>
           <th>Gênero</th>
@@ -109,7 +111,7 @@
         </tr>
       </thead>
       <tbody id="tbody-pessoas">
-        <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
+        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">Carregando...</td></tr>
       </tbody>
     </table>
   </div>
@@ -147,6 +149,24 @@
   </div>
   <div class="pagination" id="tabuleiro-pagination" style="display:none"></div>
 </div>
+
+<!-- Tab: Duplicatas -->
+<div id="tab-duplicatas" class="tab-panel">
+  <div class="toolbar">
+    <span class="mono" id="duplicatas-count">Carregando...</span>
+    <button class="btn secondary" onclick="loadDuplicatas()">↻ Atualizar</button>
+  </div>
+  <div id="duplicatas-list">
+    <div class="eventos-empty">Carregando...</div>
+  </div>
+</div>
+
+<!-- Barra de seleção para marcar duplicata (aparece com pessoas selecionadas) -->
+<div id="dup-bar" class="dup-bar" style="display:none">
+  <span class="mono" id="dup-bar-text"></span>
+  <button class="btn" id="dup-bar-btn" onclick="marcarDuplicatas()">Marcar como mesmo rosto</button>
+  <button class="btn secondary" onclick="limparDupSelecao()">✕ Limpar</button>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -173,6 +193,15 @@
   function genderBadge(g) {
     if (!g) return '<span class="mono">—</span>';
     return `<span class="badge ${g.toLowerCase()}">${g}</span>`;
+  }
+
+  // Selo de duplicata marcada pelo usuário: p.duplicata = {grupo_id, membros:[...]} ou null
+  function dupBadge(p) {
+    if (!p.duplicata) return '';
+    const outros = p.duplicata.membros.filter(m => m.id !== p.id).map(m => m.person_unique_id);
+    return `<span class="badge dup" style="font-size:9px;padding:1px 5px"
+                  title="Mesmo rosto que: ${outros.join(', ')}"
+                  onclick="event.stopPropagation(); activateDuplicatas()">⚠ duplicata ×${p.duplicata.membros.length}</span>`;
   }
 
   // ---- Status ----
@@ -268,6 +297,7 @@
     <div class="pessoa-row">
       <div class="pessoa-row-info">
         <div class="pessoa-row-code">${p.person_unique_id || '—'}</div>
+        ${dupBadge(p)}
         <div class="pessoa-row-nome">${nome}</div>
         ${meta ? `<div class="pessoa-row-meta">${meta}</div>` : ''}
         <div class="pessoa-row-count">${count}</div>
@@ -464,18 +494,19 @@
   // ---- Pessoas ----
   async function loadPessoas() {
     const tbody = document.getElementById('tbody-pessoas');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Carregando...</td></tr>';
     try {
       const r = await fetch(BASE + '/api/pessoas?limit=100');
       const d = await r.json();
       document.getElementById('pessoas-count').textContent = `${d.total} pessoas identificadas`;
       if (!d.items.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Nenhuma pessoa encontrada</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">Nenhuma pessoa encontrada</td></tr>';
         return;
       }
       tbody.innerHTML = d.items.map(p => `
         <tr>
-          <td class="mono">${p.person_unique_id}</td>
+          <td>${dupCheckbox(p)}</td>
+          <td class="mono">${p.person_unique_id} ${dupBadge(p)}</td>
           <td>
             <div class="nome-cell">
               <input class="nome-input" id="nome-${p.id}" value="${p.nome !== '—' ? p.nome : ''}" placeholder="Adicionar nome...">
@@ -490,7 +521,7 @@
         </tr>
       `).join('');
     } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:20px">Erro: ${e.message}</td></tr>`;
     }
   }
 
@@ -559,9 +590,11 @@
     const eventos = p.total_deteccoes ?? 0;
     return `
     <div class="tabuleiro-card">
+      ${dupCheckbox(p)}
       ${img}
       <div class="tabuleiro-card-body">
         <div class="tabuleiro-card-code">${p.person_unique_id || '—'}</div>
+        ${dupBadge(p)}
         <div class="tabuleiro-card-nome">${nome}</div>
         <div class="tabuleiro-card-ts">${fmtTsTabuleiro(item.primeira_timestamp)}</div>
         <div class="tabuleiro-card-count">${eventos} evento(s)</div>
@@ -618,6 +651,122 @@
       <span class="mono">Página ${page} de ${pages}</span>
       <button class="btn secondary" ${offset + limit >= total ? 'disabled' : ''} onclick="loadTabuleiro(${offset + limit})">Próxima ›</button>
     `;
+  }
+
+  // ---- Duplicatas ----
+  let duplicatasLoaded = false;
+
+  function activateDuplicatas() {
+    switchTab('duplicatas');
+    if (!duplicatasLoaded) loadDuplicatas();
+  }
+
+  function duplicataGrupo(g) {
+    const codigo = Object.fromEntries(g.pessoas.map(p => [p.id, p.person_unique_id]));
+    const cards = g.pessoas.map(p => tabuleiroCard({
+      pessoa: p,
+      primeira_face_image_url: p.primeira_face_image_url,
+      primeira_timestamp: p.primeira_deteccao,
+    })).join('');
+    const pares = g.pares.map(par => `
+        <tr>
+          <td class="mono">${codigo[par.pessoa_a_id]} ↔ ${codigo[par.pessoa_b_id]}</td>
+          <td class="mono">marcado em ${fmtTs(par.criado_em)}</td>
+          <td style="text-align:right">
+            <button class="btn secondary" onclick="removerDuplicata(${par.id})">Remover</button>
+          </td>
+        </tr>`).join('');
+    return `
+    <div class="dup-grupo">
+      <div class="dup-grupo-title">Grupo de ${g.pessoas.length} pessoas</div>
+      <div class="tabuleiro-grid">${cards}</div>
+      <table class="dup-pares"><tbody>${pares}</tbody></table>
+    </div>`;
+  }
+
+  async function loadDuplicatas() {
+    duplicatasLoaded = true;
+    const list = document.getElementById('duplicatas-list');
+    list.innerHTML = '<div class="eventos-empty">Carregando...</div>';
+    try {
+      const r = await fetch(BASE + '/api/duplicatas');
+      const d = await r.json();
+      document.getElementById('duplicatas-count').textContent = `${d.total} grupo(s) marcado(s)`;
+      list.innerHTML = d.items.length
+        ? d.items.map(duplicataGrupo).join('')
+        : '<div class="eventos-empty">Nenhuma duplicata marcada — selecione pessoas no Tabuleiro ou na aba Pessoas</div>';
+    } catch(e) {
+      list.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
+    }
+  }
+
+  // Recarrega tudo que mostra o selo de duplicata
+  function refreshDuplicataViews() {
+    loadDuplicatas();
+    loadPessoas();
+    loadEventos();
+    if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);
+  }
+
+  async function removerDuplicata(parId) {
+    try {
+      const r = await fetch(`${BASE}/api/duplicatas/${parId}`, {method: 'DELETE'});
+      if (!r.ok) { showToast('Erro ao remover par', 'var(--red)'); return; }
+      showToast('Par removido');
+      refreshDuplicataViews();
+    } catch(e) {
+      showToast('Erro de conexão', 'var(--red)');
+    }
+  }
+
+  // ---- Seleção para marcar duplicata (Tabuleiro + Pessoas) ----
+  const dupSelecao = new Map();   // id (string) -> person_unique_id
+
+  function dupCheckbox(p) {
+    const checked = dupSelecao.has(String(p.id)) ? 'checked' : '';
+    return `<input type="checkbox" class="dup-check" title="Selecionar para marcar como mesmo rosto" ${checked}
+                   onclick="event.stopPropagation()"
+                   onchange="onDupCheck('${p.id}', '${p.person_unique_id}', this.checked)">`;
+  }
+
+  function onDupCheck(id, code, checked) {
+    if (checked) dupSelecao.set(id, code);
+    else dupSelecao.delete(id);
+    // mesma pessoa pode estar visível em mais de uma aba
+    document.querySelectorAll(`.dup-check[onchange*="'${id}'"]`).forEach(cb => cb.checked = checked);
+    renderDupBar();
+  }
+
+  function renderDupBar() {
+    const bar = document.getElementById('dup-bar');
+    if (!dupSelecao.size) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('dup-bar-text').textContent =
+      `${dupSelecao.size} selecionada(s): ${[...dupSelecao.values()].join(', ')}`;
+    document.getElementById('dup-bar-btn').disabled = dupSelecao.size < 2;
+  }
+
+  function limparDupSelecao() {
+    dupSelecao.clear();
+    document.querySelectorAll('.dup-check').forEach(cb => cb.checked = false);
+    renderDupBar();
+  }
+
+  async function marcarDuplicatas() {
+    try {
+      const r = await fetch(BASE + '/api/duplicatas', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pessoa_ids: [...dupSelecao.keys()].map(Number)})
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error || 'Erro ao marcar', 'var(--red)'); return; }
+      showToast(`✓ ${dupSelecao.size} pessoas marcadas como o mesmo rosto`);
+      limparDupSelecao();
+      refreshDuplicataViews();
+    } catch(e) {
+      showToast('Erro de conexão', 'var(--red)');
+    }
   }
 
   // ---- Lightbox ----

@@ -173,6 +173,7 @@
     .badge.new    { background: rgba(123,97,255,.15); color: var(--accent2); }
     .badge.male   { background: rgba(0,229,255,.12); color: var(--accent); }
     .badge.female { background: rgba(245,197,66,.12); color: var(--yellow); }
+    .badge.dup    { background: rgba(255,77,106,.15); color: var(--red); cursor: pointer; }
 
     .mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
@@ -597,6 +598,54 @@
       font-size: 12px;
       color: var(--muted);
     }
+
+    /* ---- Duplicatas ---- */
+    .dup-grupo {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .dup-grupo-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .dup-grupo .tabuleiro-grid { margin-bottom: 10px; }
+    .dup-pares { width: 100%; border-collapse: collapse; }
+    .dup-pares td { padding: 6px 8px; font-size: 12px; }
+    .dup-pares .btn { padding: 4px 10px; font-size: 11px; }
+    .tabuleiro-card { position: relative; }
+    .tabuleiro-card .dup-check {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      z-index: 1;
+    }
+    .dup-check {
+      accent-color: var(--red);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+    .dup-bar {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      padding: 10px 14px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.5);
+      z-index: 900;
+      max-width: calc(100vw - 32px);
+    }
+    .dup-bar .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>

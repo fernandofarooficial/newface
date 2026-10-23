@@ -146,6 +146,29 @@ class EventoMatch(db.Model):
     evento = db.relationship("EventoFacial", back_populates="matches")
 
 
+class PessoaDuplicada(db.Model):
+    """Par de pessoas que o usuário marcou como o mesmo rosto (pessoa_a_id < pessoa_b_id).
+
+    Os grupos de 3+ pessoas não são gravados — saem da view
+    `vw_grupos_duplicatas` (migrations/006).
+    """
+    __tablename__ = "pessoas_duplicadas"
+    __table_args__ = {"schema": "itumbiara"}
+
+    id          = db.Column(db.Integer, primary_key=True)
+    pessoa_a_id = db.Column(db.Integer, db.ForeignKey("itumbiara.pessoas.id", ondelete="CASCADE"), nullable=False)
+    pessoa_b_id = db.Column(db.Integer, db.ForeignKey("itumbiara.pessoas.id", ondelete="CASCADE"), nullable=False)
+    criado_em   = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "pessoa_a_id": self.pessoa_a_id,
+            "pessoa_b_id": self.pessoa_b_id,
+            "criado_em": self.criado_em.isoformat() if self.criado_em else None,
+        }
+
+
 class SyncControl(db.Model):
     __tablename__ = "sync_control"
     __table_args__ = {"schema": "itumbiara"}

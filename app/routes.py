@@ -1,12 +1,13 @@
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response, session, redirect, url_for
-from sqlalchemy import func, desc, asc, or_, text
+from sqlalchemy import func, desc, asc, or_, text, bindparam
 from sqlalchemy.orm import subqueryload
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import requests as http_requests
 from requests.auth import HTTPBasicAuth
 from . import db
-from .models import EventoFacial, Pessoa, Camera, Estabelecimento, SyncControl
+from .models import EventoFacial, Pessoa, Camera, Estabelecimento, SyncControl, PessoaDuplicada
 from .collector import collect_events
 from .config import Config
 
@@ -112,6 +113,74 @@ def _store_cameras_filter(store_id):
     return EventoFacial.camera_id.in_(cams.scalar_subquery())
 
 
+def _grupos_duplicata(pessoa_ids=None):
+    """Membros dos grupos de duplicata (vw_grupos_duplicatas, migration 006).
+
+    Retorna {grupo_id: [{id, person_unique_id, nome}, ...]} só com os grupos que
+    contêm alguma das `pessoa_ids` (ou todos, se None). Membros sem evento em
+    câmera liberada para a sessão ficam de fora, e grupos que sobram com menos
+    de 2 membros visíveis são descartados — uma sessão restrita não fica
+    sabendo de pessoas de outras câmeras.
+    """
+    if pessoa_ids is not None and not pessoa_ids:
+        return {}
+    sql = """
+        SELECT v.grupo_id, p.id, p.person_unique_id, p.nome
+          FROM itumbiara.vw_grupos_duplicatas v
+          JOIN itumbiara.pessoas p ON p.id = v.pessoa_id
+         WHERE 1 = 1
+    """
+    params = {}
+    binds = []
+    if pessoa_ids is not None:
+        sql += " AND v.grupo_id IN (SELECT grupo_id FROM itumbiara.vw_grupos_duplicatas WHERE pessoa_id IN :pids)"
+        params["pids"] = [int(i) for i in pessoa_ids]
+        binds.append(bindparam("pids", expanding=True))
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        sql += (" AND EXISTS (SELECT 1 FROM itumbiara.eventos_faciais e"
+                " WHERE e.pessoa_id = p.id AND e.camera_id IN :cams)")
+        params["cams"] = list(allowed)
+        binds.append(bindparam("cams", expanding=True))
+    sql += " ORDER BY v.grupo_id, p.id"
+
+    grupos = {}
+    for r in db.session.execute(text(sql).bindparams(*binds), params):
+        grupos.setdefault(r.grupo_id, []).append(
+            {"id": r.id, "person_unique_id": r.person_unique_id, "nome": r.nome or "—"})
+    return {g: m for g, m in grupos.items() if len(m) >= 2}
+
+
+def _duplicata_por_pessoa(pessoa_ids):
+    """{pessoa_id: {grupo_id, membros}} para anexar o selo de duplicata nas respostas."""
+    out = {}
+    for grupo_id, membros in _grupos_duplicata(pessoa_ids).items():
+        for m in membros:
+            out[m["id"]] = {"grupo_id": grupo_id, "membros": membros}
+    return out
+
+
+def _primeiras_faces(pessoa_ids):
+    """{pessoa_id: row(face_image_url, timestamp_evento)} do primeiro evento de cada pessoa."""
+    if not pessoa_ids:
+        return {}
+    # Numera os eventos de cada pessoa por ordem cronológica para achar o primeiro (rn == 1)
+    rn = func.row_number().over(
+        partition_by=EventoFacial.pessoa_id,
+        order_by=asc(EventoFacial.timestamp_evento),
+    ).label("rn")
+    sub = db.session.query(
+        EventoFacial.pessoa_id.label("pessoa_id"),
+        EventoFacial.face_image_url.label("face_image_url"),
+        EventoFacial.timestamp_evento.label("timestamp_evento"),
+        rn,
+    ).filter(EventoFacial.pessoa_id.in_(pessoa_ids)).subquery()
+
+    rows = db.session.query(sub.c.pessoa_id, sub.c.face_image_url, sub.c.timestamp_evento)\
+        .filter(sub.c.rn == 1).all()
+    return {r.pessoa_id: r for r in rows}
+
+
 # ------------------------------------------------------------------
 # API - Eventos recentes
 # ------------------------------------------------------------------
@@ -201,12 +270,13 @@ def pessoas():
 
     total = q.count()
     items = q.offset(offset).limit(limit).all()
+    dups = _duplicata_por_pessoa([p.id for p in items])
 
     return jsonify({
         "total": total,
         "limit": limit,
         "offset": offset,
-        "items": [p.to_dict() for p in items]
+        "items": [{**p.to_dict(), "duplicata": dups.get(p.id)} for p in items]
     })
 
 
@@ -322,6 +392,7 @@ def pessoas_eventos():
     else:
         pessoas = pq.limit(50).all()
 
+    dups = _duplicata_por_pessoa([p.id for p in pessoas])
     items = []
     for p in pessoas:
         # Query de eventos específica para esta pessoa, com todos os filtros
@@ -343,7 +414,7 @@ def pessoas_eventos():
             match_images = {row.event_id: row.face_image_url for row in rows}
 
         items.append({
-            "pessoa": p.to_dict(),
+            "pessoa": {**p.to_dict(), "duplicata": dups.get(p.id)},
             "eventos": [ev.to_dict(match_images=match_images) for ev in eventos],
         })
 
@@ -385,29 +456,14 @@ def tabuleiro():
     pessoas = pq.offset(offset).limit(TABULEIRO_LIMIT).all()
 
     pessoa_ids = [p.id for p in pessoas]
-    primeiras = {}
-    if pessoa_ids:
-        # Numera os eventos de cada pessoa por ordem cronológica para achar o primeiro (rn == 1)
-        rn = func.row_number().over(
-            partition_by=EventoFacial.pessoa_id,
-            order_by=asc(EventoFacial.timestamp_evento),
-        ).label("rn")
-        sub = db.session.query(
-            EventoFacial.pessoa_id.label("pessoa_id"),
-            EventoFacial.face_image_url.label("face_image_url"),
-            EventoFacial.timestamp_evento.label("timestamp_evento"),
-            rn,
-        ).filter(EventoFacial.pessoa_id.in_(pessoa_ids)).subquery()
-
-        rows = db.session.query(sub.c.pessoa_id, sub.c.face_image_url, sub.c.timestamp_evento)\
-            .filter(sub.c.rn == 1).all()
-        primeiras = {r.pessoa_id: r for r in rows}
+    primeiras = _primeiras_faces(pessoa_ids)
+    dups = _duplicata_por_pessoa(pessoa_ids)
 
     items = []
     for p in pessoas:
         pf = primeiras.get(p.id)
         items.append({
-            "pessoa": p.to_dict(),
+            "pessoa": {**p.to_dict(), "duplicata": dups.get(p.id)},
             "primeira_face_image_url": pf.face_image_url if pf else None,
             "primeira_timestamp": pf.timestamp_evento.isoformat() if pf and pf.timestamp_evento else None,
         })
@@ -419,6 +475,89 @@ def tabuleiro():
         "sort": sort,
         "items": items,
     })
+
+
+# ------------------------------------------------------------------
+# API - Pessoas marcadas pelo usuário como o mesmo rosto (migration 006)
+# ------------------------------------------------------------------
+def _pessoas_visiveis(pessoa_ids):
+    """Subconjunto de `pessoa_ids` com ao menos um evento em câmera liberada para a sessão."""
+    allowed = _allowed_cameras()
+    if allowed is None:
+        rows = db.session.query(Pessoa.id).filter(Pessoa.id.in_(pessoa_ids))
+    else:
+        rows = db.session.query(EventoFacial.pessoa_id).filter(
+            EventoFacial.pessoa_id.in_(pessoa_ids),
+            EventoFacial.camera_id.in_(allowed),
+        ).distinct()
+    return {r[0] for r in rows}
+
+
+@bp.route("/api/duplicatas")
+def duplicatas():
+    grupos = _grupos_duplicata()
+    membro_ids = [m["id"] for membros in grupos.values() for m in membros]
+    if not membro_ids:
+        return jsonify({"total": 0, "items": []})
+
+    pessoas = {p.id: p for p in db.session.query(Pessoa).filter(Pessoa.id.in_(membro_ids))}
+    primeiras = _primeiras_faces(membro_ids)
+    pares = db.session.query(PessoaDuplicada).filter(
+        PessoaDuplicada.pessoa_a_id.in_(membro_ids),
+        PessoaDuplicada.pessoa_b_id.in_(membro_ids),
+    ).order_by(PessoaDuplicada.id).all()
+
+    items = []
+    for grupo_id, membros in grupos.items():
+        ids = {m["id"] for m in membros}
+        items.append({
+            "grupo_id": grupo_id,
+            "pessoas": [{
+                **pessoas[i].to_dict(),
+                "primeira_face_image_url": primeiras[i].face_image_url if i in primeiras else None,
+            } for i in sorted(ids)],
+            "pares": [par.to_dict() for par in pares if par.pessoa_a_id in ids and par.pessoa_b_id in ids],
+        })
+    items.sort(key=lambda g: len(g["pessoas"]), reverse=True)
+
+    return jsonify({"total": len(items), "items": items})
+
+
+@bp.route("/api/duplicatas", methods=["POST"])
+def marcar_duplicatas():
+    """Marca as pessoas selecionadas como o mesmo rosto.
+
+    Liga a de menor id a cada uma das outras (N-1 pares) — basta para a view
+    juntar todas no mesmo grupo, inclusive com grupos que já existiam.
+    """
+    try:
+        ids = sorted({int(i) for i in (request.get_json() or {}).get("pessoa_ids", [])})
+    except (TypeError, ValueError):
+        return jsonify({"error": "pessoa_ids inválido"}), 400
+    if len(ids) < 2:
+        return jsonify({"error": "Selecione ao menos 2 pessoas"}), 400
+    if _pessoas_visiveis(ids) != set(ids):
+        return jsonify({"error": "Pessoa não encontrada"}), 404
+
+    t = PessoaDuplicada.__table__
+    stmt = pg_insert(t).values([{"pessoa_a_id": ids[0], "pessoa_b_id": outra} for outra in ids[1:]])        .on_conflict_do_nothing(index_elements=[t.c.pessoa_a_id, t.c.pessoa_b_id])
+    criados = db.session.execute(stmt).rowcount
+    db.session.commit()
+    return jsonify({"ok": True, "criados": criados})
+
+
+@bp.route("/api/duplicatas/<int:par_id>", methods=["DELETE"])
+def remover_duplicata(par_id):
+    par = db.session.get(PessoaDuplicada, par_id)
+    if not par:
+        return jsonify({"error": "Par não encontrado"}), 404
+    # Sessão restrita só remove par cujas duas pessoas aparecem nas suas câmeras
+    if len(_pessoas_visiveis([par.pessoa_a_id, par.pessoa_b_id])) < 2:
+        return jsonify({"error": "Par não encontrado"}), 404
+
+    db.session.delete(par)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 # ------------------------------------------------------------------

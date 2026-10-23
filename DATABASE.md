@@ -24,6 +24,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/002_add_face_image_url.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/003_camera_fk.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/004_check_constraints.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/005_sync_control_history_index.sql
+psql -U fefa_dev -h localhost -d lojas -f migrations/006_pessoas_duplicadas.sql
 ```
 
 | Arquivo | O que faz |
@@ -33,6 +34,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/005_sync_control_history_in
 | `003_camera_fk.sql` | Backfill de câmeras órfãs + FK `eventos_faciais.camera_id` → `cameras.camera_id` (`NOT VALID`, ver nota abaixo) |
 | `004_check_constraints.sql` | CHECK constraints de domínio (gênero, score/similarity/quality em `[0,1]`, status de sync) (`NOT VALID`) |
 | `005_sync_control_history_index.sql` | Índice por `criado_em` em `sync_control`, agora que é histórico append-only |
+| `006_pessoas_duplicadas.sql` | Tabela `pessoas_duplicadas` (pares marcados pelo usuário como o mesmo rosto) e view `vw_grupos_duplicatas` (grupos) |
 
 **Sobre `NOT VALID`** (migrations 003 e 004): a constraint passa a valer para todo `INSERT`/`UPDATE` novo imediatamente, mas não varre as linhas já existentes na hora do `ALTER TABLE` (evita lock longo em tabela grande). Cada arquivo termina com os `SELECT`s para checar dados antigos e os `ALTER TABLE ... VALIDATE CONSTRAINT ...` para rodar depois, manualmente, quando a checagem vier vazia.
 
@@ -46,6 +48,10 @@ estabelecimentos ──< cameras
        └──< eventos_faciais >── pessoas
                   │
                   └──< evento_matches
+
+pessoas ──< pessoas_duplicadas >── pessoas   (par A–B marcado pelo usuário, A < B)
+                  │
+                  └── vw_grupos_duplicatas (view: grupos conexos de pares)
 
 sync_control  (tabela solitária, 1 linha por execução de coleta)
 ```
@@ -144,6 +150,20 @@ Ocorrências anteriores da mesma pessoa que vieram junto no payload do evento (`
 
 Índice: `idx_em_evento`. Sem FK para `event_id_ref` — é só um texto de referência; a foto do match (`face_image_url`) é resolvida em `routes.py` fazendo lookup por `event_id_ref` contra `eventos_faciais.event_id` quando existir.
 
+### `pessoas_duplicadas`
+Pares de pessoas que o **usuário** marcou como o mesmo rosto cadastrado com `person_unique_id` diferentes (migration 006). Nada aqui é automático: o collector não lê nem grava esta tabela. A marcação é feita no dashboard (checkbox no Tabuleiro ou na aba Pessoas → "Marcar como mesmo rosto" → `POST /api/duplicatas`), que liga a pessoa de menor `id` a cada uma das outras selecionadas (N-1 pares).
+
+| Coluna | Tipo | Notas |
+|--------|------|-------|
+| `id` | SERIAL PK | |
+| `pessoa_a_id` / `pessoa_b_id` | INTEGER NOT NULL → `pessoas.id` ON DELETE CASCADE | Sempre `pessoa_a_id < pessoa_b_id` (CHECK `chk_pd_ordem`) e `UNIQUE (pessoa_a_id, pessoa_b_id)` (`uq_pd_par`) — o mesmo par nunca aparece duas vezes nem invertido |
+| `criado_em` | TIMESTAMPTZ | Quando o par foi marcado |
+
+Índices: `uq_pd_par` (cobre buscas por `pessoa_a_id`), `idx_pd_pessoa_b`. Desfazer uma marcação = apagar o par (`DELETE /api/duplicatas/<id>`, botão "Remover" na aba Duplicatas); não há status nem soft-delete.
+
+### `vw_grupos_duplicatas` (view)
+Os pares são só as "ligações"; quando o mesmo rosto está em 3+ pessoas (A–B, A–C, ou marcações feitas em momentos diferentes como A–B e depois B–C), o grupo é o componente conexo do grafo de pares. A view resolve isso com um `WITH RECURSIVE` e devolve uma linha por pessoa marcada: `pessoa_id`, `grupo_id` (= menor `pessoas.id` do grupo) e `tamanho_grupo`. O grupo não é gravado em lugar nenhum de propósito: remover um par pode tirar uma pessoa do grupo ou quebrá-lo em dois, e a próxima consulta já sai certa sem recalcular nada.
+
 ### `sync_control`
 Histórico de execuções do collector — **append-only desde a migration 005**: cada ciclo de coleta insere uma linha nova (`status="running"` no início, atualizada para `idle`/`error` no fim da mesma execução) em vez de reaproveitar/sobrescrever a última. `GET /api/status` continua lendo só a mais recente (`ORDER BY id DESC LIMIT 1`), mas agora dá pra consultar o histórico completo (`idx_sync_control_criado_em`).
 
@@ -180,4 +200,4 @@ Para um total acumulado histórico, agregue com `SUM(total_inseridos)`/`SUM(tota
 - **O `store_id` da API Facial não é confiável — o cadastro de `cameras` é a fonte de verdade do estabelecimento.** A API reporta câmeras sob estabelecimentos errados (ex: `cam_5` vinha como store 1, mas pertence ao Condomínio; `cam_8`/`cam_9` vinham como Condomínio, mas são de Porto Alegre). Até 2026-10-12 o collector gravava esse valor direto em `eventos_faciais.estabelecimento_id`, o que fazia o filtro Estabelecimento da tela Eventos Recentes trazer eventos de outras câmeras. Corrigido em três frentes: (1) o collector passou a copiar `cameras.estabelecimento_id`; (2) os filtros `store_id` de `/api/eventos` e `/api/pessoas-eventos` filtram por `camera_id IN (câmeras do estabelecimento)` (`_store_cameras_filter` em `routes.py`); (3) os 115 eventos antigos foram realinhados em produção com `UPDATE itumbiara.eventos_faciais e SET estabelecimento_id = c.estabelecimento_id FROM itumbiara.cameras c WHERE c.camera_id = e.camera_id AND e.estabelecimento_id IS DISTINCT FROM c.estabelecimento_id`. Se uma câmera mudar de estabelecimento no cadastro, rode esse mesmo `UPDATE` para realinhar os eventos dela. Câmeras novas são auto-registradas com o `store_id` da API — confira o estabelecimento delas no cadastro.
 - **`nome` em `pessoas` é o único campo editável pelo usuário** via UI; todo o resto vem só da API/collector.
 - **`collect_events` só roda em um processo por vez**, mesmo com múltiplos workers do gunicorn. `create_app()` (`app/__init__.py`) só registra o job do APScheduler no worker que conseguir um `flock` exclusivo em `/tmp/newface_scheduler.lock`; os outros workers seguem servindo HTTP normalmente, só não agendam a coleta. No Windows local (sempre processo único) isso é pulado. Sem esse lock, dois workers rodando o mesmo ciclo ao mesmo tempo causavam `UniqueViolation` esporádico ao inserir `event_id` e dobravam as chamadas à API Facial.
-- **`POST /api/reset-base`** (botão "Reset Base" no header, só visível/permitido para a sessão com acesso total) roda `TRUNCATE itumbiara.eventos_faciais, itumbiara.pessoas RESTART IDENTITY CASCADE`. O `CASCADE` também esvazia `evento_matches` (FK para `eventos_faciais`) e o `RESTART IDENTITY` zera as sequences de `id` das três tabelas — a próxima pessoa/evento inserido volta a começar do `id=1`. `cameras`, `estabelecimentos` e `sync_control` **não** são tocados, então o histórico de execuções do collector sobrevive ao reset. Não há como desfazer — não existe soft-delete nem backup automático antes do truncate.
+- **`POST /api/reset-base`** (botão "Reset Base" no header, só visível/permitido para a sessão com acesso total) roda `TRUNCATE itumbiara.eventos_faciais, itumbiara.pessoas RESTART IDENTITY CASCADE`. O `CASCADE` também esvazia `evento_matches` (FK para `eventos_faciais`) e `pessoas_duplicadas` (FK para `pessoas`) e o `RESTART IDENTITY` zera as sequences de `id` das três tabelas — a próxima pessoa/evento inserido volta a começar do `id=1`. `cameras`, `estabelecimentos` e `sync_control` **não** são tocados, então o histórico de execuções do collector sobrevive ao reset. Não há como desfazer — não existe soft-delete nem backup automático antes do truncate.

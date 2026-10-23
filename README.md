@@ -29,7 +29,7 @@ newface/
 │       ├── base.html
 │       └── index.html   # Dashboard
 ├── migrations/
-│   └── 001...005_*.sql        # DDL – rodar no DBeaver, em ordem (ver DATABASE.md)
+│   └── 001...006_*.sql        # DDL – rodar no DBeaver, em ordem (ver DATABASE.md)
 ├── .env.example
 ├── .gitignore
 ├── gunicorn.conf.py
@@ -67,7 +67,7 @@ Acesse: http://localhost:5006
 
 ## 2. Banco de dados
 
-Execute os arquivos de `migrations/` no DBeaver/psql, em ordem numérica (001 a 005). Detalhes de cada um, o schema completo e o padrão `NOT VALID` + `VALIDATE CONSTRAINT` usado pelas migrations 003/004 estão em [`DATABASE.md`](./DATABASE.md).
+Execute os arquivos de `migrations/` no DBeaver/psql, em ordem numérica (001 a 006). Detalhes de cada um, o schema completo e o padrão `NOT VALID` + `VALIDATE CONSTRAINT` usado pelas migrations 003/004 estão em [`DATABASE.md`](./DATABASE.md).
 
 Conexão:
 - Host: `72.60.58.241`
@@ -190,6 +190,9 @@ git push -u origin main
 | POST | `/api/reset-base` | **Destrutivo.** Apaga todos os eventos e pessoas (`TRUNCATE ... RESTART IDENTITY CASCADE`); exige sessão com acesso total (senha `ACCESS_CODE_ALL`), retorna `403` caso contrário |
 | GET | `/api/cameras` | Câmeras cadastradas |
 | GET | `/api/estabelecimentos` | Estabelecimentos |
+| GET | `/api/duplicatas` | Grupos de pessoas marcadas pelo usuário como o mesmo rosto (aba Duplicatas) |
+| POST | `/api/duplicatas` | `{pessoa_ids: [...]}` — marca 2+ pessoas como o mesmo rosto |
+| DELETE | `/api/duplicatas/:id` | Remove um par marcado |
 
 > O estabelecimento de cada evento vem do cadastro de câmeras (`cameras.estabelecimento_id`), não do `store_id` enviado pela API Facial, que não bate com o cadastro. O filtro `store_id` de `/api/eventos` e `/api/pessoas-eventos` também filtra pelas câmeras do estabelecimento. Detalhes em `DATABASE.md`.
 
