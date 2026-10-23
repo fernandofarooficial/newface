@@ -194,5 +194,7 @@ def collect_events(app) -> dict:
         sync.mensagem        = f"Última coleta: {result['inseridos']} novos, {result['ignorados']} ignorados"
         db.session.commit()
 
-    logger.info(f"Coleta finalizada: {result}")
+    # Ciclo sem novidade (a maioria, a cada 30s) fica em DEBUG para não inundar o app.log
+    level = logging.INFO if result["inseridos"] or result["erros"] else logging.DEBUG
+    logger.log(level, f"Coleta finalizada: {result}")
     return result

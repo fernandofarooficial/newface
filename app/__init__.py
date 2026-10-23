@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 
@@ -48,7 +49,23 @@ def _acquire_scheduler_lock() -> bool:
     return True
 
 
+def _configure_logging():
+    """Envia os logs do app (logger "newface.*") para stderr com data/hora.
+
+    Sem isso o Python só imprime WARNING+ sem timestamp e os logger.info do
+    collector somem. Em produção o stderr do gunicorn vai para
+    /var/log/newface/app.log (StandardError= no newface.service).
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(process)d] %(levelname)s %(name)s: %(message)s",
+    )
+    # O APScheduler loga 2 linhas INFO por execução do job (a cada 30s)
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+
 def create_app():
+    _configure_logging()
     app = Flask(__name__)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     app.config.from_object(Config)
@@ -74,5 +91,6 @@ def create_app():
         )
         if not scheduler.running:
             scheduler.start()
+            logging.getLogger("newface").info(f"Scheduler de coleta iniciado neste processo (a cada {interval}s)")
 
     return app

@@ -34,7 +34,7 @@ cd /var/www/newface
 git pull
 systemctl restart newface          # gunicorn managed by systemd
 ```
-Logs: `/var/log/newface/app.log`, `/var/log/newface/access.log`
+Logs: `/var/log/newface/app.log` (app's Python logging — stdout/stderr redirected by `newface.service`), `/var/log/newface/access.log` and `error.log` (gunicorn's own). `_configure_logging()` in `app/__init__.py` sets INFO + timestamps for the root logger and silences APScheduler's per-run INFO lines; idle collection cycles ("Coleta finalizada" with 0 inserted/0 errors) log at DEBUG, so a quiet `app.log` means nothing happened, not that collection stopped — check `sync_control` for that. Rotated daily (14 days, gzip, `copytruncate`) by `/etc/logrotate.d/newface`, versioned as `deploy/logrotate.newface`.
 
 SSH access is preconfigured via the `camwatch-vps` host alias (`~/.ssh/config`, key `~/.ssh/id_ed25519_camwatch`, user `root`) — `ssh camwatch-vps` connects directly, no credentials to ask for. Always check `git log`/`systemctl status` on the VPS *before* pulling or restarting, to know what's already deployed.
 

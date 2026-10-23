@@ -1,0 +1,12 @@
+# Rotação dos logs do newface — instalar em /etc/logrotate.d/newface
+# copytruncate: o systemd (StandardOutput/StandardError=append:) e o gunicorn
+# (accesslog/errorlog) mantêm os arquivos abertos e não reabrem com sinal.
+/var/log/newface/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
