@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, time, timezone, timedelta
 
 from flask import Blueprint, jsonify, render_template, request, current_app, Response, session, redirect, url_for
 from sqlalchemy import func, desc, asc, or_, text, bindparam
@@ -14,6 +14,9 @@ from .config import Config
 bp = Blueprint("main", __name__)
 
 PUBLIC_ENDPOINTS = {"main.login_page", "main.login_submit"}
+
+# Fuso dos "dias" mostrados ao usuário (filtros de data e relatório)
+TZ_LOCAL = "America/Sao_Paulo"
 
 
 def _allowed_cameras():
@@ -111,6 +114,32 @@ def _store_cameras_filter(store_id):
     """
     cams = db.session.query(Camera.camera_id).filter(Camera.estabelecimento_id == store_id)
     return EventoFacial.camera_id.in_(cams.scalar_subquery())
+
+
+def _parse_dia(valor):
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").date() if valor else None
+    except ValueError:
+        return None
+
+
+def _inicio_do_dia(dia):
+    """00:00 de `dia` no fuso de São Paulo, como timestamptz (conversão feita no PostgreSQL)."""
+    return func.timezone(TZ_LOCAL, datetime.combine(dia, time.min))
+
+
+def _filtro_periodo(q, date_from, date_to):
+    """Recorta eventos por dias inclusivos (`YYYY-MM-DD`) no fuso de São Paulo; datas inválidas são ignoradas.
+
+    O dia do usuário é o de São Paulo, não o UTC — cortar em UTC jogava as
+    coletas depois das 21h para o dia seguinte.
+    """
+    ini, fim = _parse_dia(date_from), _parse_dia(date_to)
+    if ini:
+        q = q.filter(EventoFacial.timestamp_evento >= _inicio_do_dia(ini))
+    if fim:
+        q = q.filter(EventoFacial.timestamp_evento < _inicio_do_dia(fim + timedelta(days=1)))
+    return q
 
 
 def _grupos_duplicata(pessoa_ids=None):
@@ -218,21 +247,7 @@ def eventos():
     if pessoa_ids:
         q = q.filter(EventoFacial.pessoa_id.in_(pessoa_ids))
 
-    date_from = request.args.get("date_from")
-    if date_from:
-        try:
-            dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            q = q.filter(EventoFacial.timestamp_evento >= dt)
-        except ValueError:
-            pass
-
-    date_to = request.args.get("date_to")
-    if date_to:
-        try:
-            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-            q = q.filter(EventoFacial.timestamp_evento < dt)
-        except ValueError:
-            pass
+    q = _filtro_periodo(q, request.args.get("date_from"), request.args.get("date_to"))
 
     if request.args.get("has_matches") == "1":
         q = q.filter(EventoFacial.matched == True)
@@ -394,20 +409,7 @@ def _build_event_filters(q):
     match_type = request.args.get("match_type")
     if match_type:
         q = q.filter(EventoFacial.match_type == match_type)
-    date_from = request.args.get("date_from")
-    if date_from:
-        try:
-            dt = datetime.strptime(date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            q = q.filter(EventoFacial.timestamp_evento >= dt)
-        except ValueError:
-            pass
-    date_to = request.args.get("date_to")
-    if date_to:
-        try:
-            dt = datetime.strptime(date_to, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
-            q = q.filter(EventoFacial.timestamp_evento < dt)
-        except ValueError:
-            pass
+    q = _filtro_periodo(q, request.args.get("date_from"), request.args.get("date_to"))
     if request.args.get("has_matches") == "1":
         q = q.filter(EventoFacial.matched == True)
     return q
@@ -517,8 +519,6 @@ def tabuleiro():
 # ------------------------------------------------------------------
 # API - Relatório de estatísticas (coletas, pessoas, não conformidades)
 # ------------------------------------------------------------------
-RELATORIO_TZ = "America/Sao_Paulo"
-
 # Uma linha por evento no recorte, já com as flags que o relatório soma.
 # - criou: é o primeiro evento da pessoa no banco inteiro (= a coleta que criou a pessoa)
 # - dup_excedente: criou uma pessoa que está num grupo de duplicata e não é o
@@ -570,13 +570,6 @@ _RELATORIO_CAMPOS = ("coletas", "pessoas_vistas", "pessoas_criadas", "intrusas",
                      "coletas_nc", "pessoas_em_duplicata", "duplicatas_excedentes", "grupos_duplicata")
 
 
-def _parse_dia(valor):
-    try:
-        return datetime.strptime(valor, "%Y-%m-%d").date() if valor else None
-    except ValueError:
-        return None
-
-
 @bp.route("/api/relatorio")
 def relatorio():
     """Estatísticas do recorte: banco inteiro ou `date_from`..`date_to` (dias no fuso de São Paulo, inclusivos).
@@ -590,10 +583,10 @@ def relatorio():
     params = {}
     binds = []
     if date_from:
-        where.append(f"e.timestamp_evento >= CAST(:ini AS date)::timestamp AT TIME ZONE '{RELATORIO_TZ}'")
+        where.append(f"e.timestamp_evento >= CAST(:ini AS date)::timestamp AT TIME ZONE '{TZ_LOCAL}'")
         params["ini"] = date_from.isoformat()
     if date_to:
-        where.append(f"e.timestamp_evento < (CAST(:fim AS date) + 1)::timestamp AT TIME ZONE '{RELATORIO_TZ}'")
+        where.append(f"e.timestamp_evento < (CAST(:fim AS date) + 1)::timestamp AT TIME ZONE '{TZ_LOCAL}'")
         params["fim"] = date_to.isoformat()
     allowed = _allowed_cameras()
     if allowed is not None:
@@ -609,7 +602,7 @@ def relatorio():
         where.append("e.camera_id IN (SELECT camera_id FROM itumbiara.cameras WHERE estabelecimento_id = :store_id)")
         params["store_id"] = int(store_id)
 
-    sql = text(_RELATORIO_SQL.format(tz=RELATORIO_TZ, where=" AND ".join(where))).bindparams(*binds)
+    sql = text(_RELATORIO_SQL.format(tz=TZ_LOCAL, where=" AND ".join(where))).bindparams(*binds)
 
     total = dict.fromkeys(_RELATORIO_CAMPOS, 0)
     total.update(primeiro_dia=None, ultimo_dia=None)
