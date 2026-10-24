@@ -1043,9 +1043,11 @@
         <div class="rel-secao">Não conformidades</div>
         <div class="stats-grid">
           ${relCard('Intrusas', fmtNum(t.intrusas), 'red',
-                    `${pct(t.intrusas, t.coletas)} das coletas — rosto de outra pessoa`)}
+                    `das coletas — rosto de outra pessoa`,
+                    pct(t.intrusas, t.coletas))}
           ${relCard('Indesejadas', fmtNum(t.indesejadas), 'yellow',
-                    `${pct(t.indesejadas, t.coletas)} das coletas — de costas, encoberta, pouca luz...`)}
+                    `das coletas — de costas, encoberta, pouca luz...`,
+                    pct(t.indesejadas, t.coletas))}
           ${relCard('Duplicatas', fmtNum(t.duplicatas_excedentes), 'red',
                     `das pessoas criadas eram cadastros a mais · ${fmtNum(t.pessoas_em_duplicata)} pessoa(s) em ${fmtNum(t.grupos_duplicata)} grupo(s)`,
                     pct(t.duplicatas_excedentes, t.pessoas_criadas))}
