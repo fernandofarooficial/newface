@@ -183,7 +183,9 @@ git push -u origin main
 |--------|-----|-----------|
 | GET | `/` | Dashboard |
 | GET | `/api/status` | Status do sync + estatísticas |
-| GET | `/api/eventos?limit=50` | Eventos recentes |
+| GET | `/api/eventos?limit=50` | Eventos recentes. Filtros: `date_from`/`date_to` (dias no fuso de São Paulo), `camera_id`, `store_id`, `match_type`, `pessoa_id` (repetível), `has_matches` |
+| GET | `/api/pessoas-eventos?limit=100` | Eventos agrupados por pessoa (aba Eventos Recentes), mesmos filtros de `/api/eventos`. `limit` = pessoas por tela (padrão 100, de 1 a 300; ignorado quando há `pessoa_id`); os filtros são aplicados antes do limite |
+| GET | `/api/tabuleiro?offset=0` | Uma pessoa por card com a primeira foto (aba Tabuleiro), 120 por página; filtros `camera_id`, `store_id`, `sort` |
 | GET | `/api/pessoas?limit=50` | Pessoas identificadas |
 | POST | `/api/pessoas/:id/nome` | Atualizar nome de uma pessoa |
 | POST | `/api/eventos/:id/intruso` | `{intruso: true/false}` — marca/desmarca uma captura como rosto de outra pessoa |
