@@ -946,11 +946,12 @@
     return b ? (a / b * 100).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%' : '—';
   }
 
-  function relCard(label, valor, cor, detalhe) {
+  // destaque: texto opcional (ex.: percentual) mostrado grande ao lado do valor
+  function relCard(label, valor, cor, detalhe, destaque) {
     return `
     <div class="stat-card">
       <div class="stat-label">${label}</div>
-      <div class="stat-value ${cor}">${valor}</div>
+      <div class="stat-value ${cor}">${valor}${destaque ? `<span class="rel-destaque">${destaque}</span>` : ''}</div>
       ${detalhe ? `<div class="rel-detalhe">${detalhe}</div>` : ''}
     </div>`;
   }
@@ -1046,7 +1047,8 @@
           ${relCard('Indesejadas', fmtNum(t.indesejadas), 'yellow',
                     `${pct(t.indesejadas, t.coletas)} das coletas — de costas, encoberta, pouca luz...`)}
           ${relCard('Duplicatas', fmtNum(t.duplicatas_excedentes), 'red',
-                    `${pct(t.duplicatas_excedentes, t.pessoas_criadas)} das pessoas criadas eram cadastros a mais · ${fmtNum(t.pessoas_em_duplicata)} pessoa(s) em ${fmtNum(t.grupos_duplicata)} grupo(s)`)}
+                    `das pessoas criadas eram cadastros a mais · ${fmtNum(t.pessoas_em_duplicata)} pessoa(s) em ${fmtNum(t.grupos_duplicata)} grupo(s)`,
+                    pct(t.duplicatas_excedentes, t.pessoas_criadas))}
           ${relCard('Coletas conformes', pct(conformes, t.coletas), 'green',
                     `${fmtNum(conformes)} de ${fmtNum(t.coletas)} · ${fmtNum(t.coletas_nc)} intrusa(s) ou indesejada(s)`)}
         </div>
