@@ -415,7 +415,8 @@ def _build_event_filters(q):
     return q
 
 
-PESSOAS_EVENTOS_LIMIT = 100   # pessoas na aba Eventos Recentes quando nenhuma é filtrada
+PESSOAS_EVENTOS_LIMIT = 100   # padrão de pessoas na aba Eventos Recentes quando nenhuma é filtrada
+PESSOAS_EVENTOS_MAX = 300     # teto do `limit` escolhido pelo usuário (cada pessoa custa uma consulta)
 
 
 @bp.route("/api/pessoas-eventos")
@@ -436,7 +437,9 @@ def pessoas_eventos():
 
     pq = db.session.query(Pessoa).join(sub, sub.c.pessoa_id == Pessoa.id)\
         .order_by(desc(sub.c.ultimo_evento), desc(Pessoa.id))
-    pessoas = pq.all() if pessoa_ids else pq.limit(PESSOAS_EVENTOS_LIMIT).all()
+    limit = request.args.get("limit", PESSOAS_EVENTOS_LIMIT, type=int)
+    limit = min(max(limit, 1), PESSOAS_EVENTOS_MAX)
+    pessoas = pq.all() if pessoa_ids else pq.limit(limit).all()
 
     dups = _duplicata_por_pessoa([p.id for p in pessoas])
     items = []
