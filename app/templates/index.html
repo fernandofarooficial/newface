@@ -261,7 +261,7 @@
       day:'2-digit', month:'2-digit', year:'2-digit'});
     const time = d.toLocaleTimeString('pt-BR', {timeZone:'America/Sao_Paulo',
       hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    return `${date}<br>${time}`;
+    return `<span class="ts-data">${date}</span><br><span class="ts-hora">${time}</span>`;
   }
 
   function genderBadge(g) {
