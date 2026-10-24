@@ -27,6 +27,7 @@
   <button class="tab-btn" data-tab="pessoas" onclick="switchTab('pessoas')">Pessoas</button>
   <button class="tab-btn" data-tab="tabuleiro" onclick="activateTabuleiro()">Tabuleiro</button>
   <button class="tab-btn" data-tab="duplicatas" onclick="activateDuplicatas()">Duplicatas</button>
+  <button class="tab-btn" data-tab="marcadas" onclick="activateMarcadas()">Intrusas / Indesejadas</button>
 </div>
 
 <!-- Tab: Eventos -->
@@ -161,6 +162,30 @@
   </div>
 </div>
 
+<!-- Tab: Intrusas / Indesejadas -->
+<div id="tab-marcadas" class="tab-panel">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label class="filter-label">Tipo</label>
+      <select id="f-marc-tipo" class="filter-select" onchange="loadMarcadas(0)">
+        <option value="">Intrusas e indesejadas</option>
+        <option value="intruso">Só intrusas</option>
+        <option value="indesejada">Só indesejadas</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="mono" id="marcadas-count">Carregando...</span>
+    <span class="mono" style="color:var(--muted);font-size:11px">esquerda: captura marcada · direita: 1ª foto da pessoa</span>
+    <button class="btn secondary" onclick="loadMarcadas(marcadasOffset)">↻ Atualizar</button>
+  </div>
+  <div class="marcadas-grid" id="marcadas-grid">
+    <div class="eventos-empty">Carregando...</div>
+  </div>
+  <div class="pagination" id="marcadas-pagination" style="display:none"></div>
+</div>
+
 <!-- Barra de seleção para marcar duplicata (aparece com pessoas selecionadas) -->
 <div id="dup-bar" class="dup-bar" style="display:none">
   <span class="mono" id="dup-bar-text"></span>
@@ -246,7 +271,7 @@
       : '';
 
     return `
-    <div class="evento-card ${match ? 'dual' : 'single'} ${e.intruso ? 'intruso' : ''} ${e.indesejada ? 'indesejada' : ''}" id="ev-card-${e.id}">
+    <div class="evento-card ${match ? 'dual' : 'single'} ${e.intruso ? 'intruso' : ''} ${e.indesejada ? 'indesejada' : ''}" data-ev="${e.id}">
       <div class="evento-intruso-tag">INTRUSO</div>
       <div class="evento-indesejada-tag">INDESEJADA</div>
       <div class="evento-photos">
@@ -270,10 +295,10 @@
     </div>`;
   }
 
-  // Marca/desmarca a captura como intrusa e atualiza só o card, sem recarregar a lista
+  // Marca/desmarca a captura como intrusa e atualiza só os cards dela (em qualquer aba), sem recarregar a lista
   async function toggleIntruso(eventoId) {
-    const card = document.getElementById(`ev-card-${eventoId}`);
-    const intruso = !card.classList.contains('intruso');
+    const cards = document.querySelectorAll(`[data-ev="${eventoId}"]`);
+    const intruso = !cards[0].classList.contains('intruso');
     try {
       const r = await fetch(`${BASE}/api/eventos/${eventoId}/intruso`, {
         method: 'POST',
@@ -281,10 +306,13 @@
         body: JSON.stringify({intruso})
       });
       if (!r.ok) { showToast('Erro ao marcar captura', 'var(--red)'); return; }
-      card.classList.toggle('intruso', intruso);
-      card.querySelector('.intruso-btn').textContent = intruso ? '↺ Não é intruso' : '⚠ Intruso';
+      cards.forEach(card => {
+        card.classList.toggle('intruso', intruso);
+        card.querySelector('.intruso-btn').textContent = intruso ? '↺ Não é intruso' : '⚠ Intruso';
+      });
       showToast(intruso ? 'Captura marcada como intrusa' : 'Marcação de intruso removida');
       if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);   // a primeira foto pode ter mudado
+      onMarcacaoAlterada();
     } catch(e) {
       showToast('Erro de conexão', 'var(--red)');
     }
@@ -292,8 +320,8 @@
 
   // Marca/desmarca a captura como coleta indesejada e atualiza só o card
   async function toggleIndesejada(eventoId) {
-    const card = document.getElementById(`ev-card-${eventoId}`);
-    const indesejada = !card.classList.contains('indesejada');
+    const cards = document.querySelectorAll(`[data-ev="${eventoId}"]`);
+    const indesejada = !cards[0].classList.contains('indesejada');
     try {
       const r = await fetch(`${BASE}/api/eventos/${eventoId}/indesejada`, {
         method: 'POST',
@@ -301,10 +329,13 @@
         body: JSON.stringify({indesejada})
       });
       if (!r.ok) { showToast('Erro ao marcar captura', 'var(--red)'); return; }
-      card.classList.toggle('indesejada', indesejada);
-      card.querySelector('.indesejada-btn').textContent = indesejada ? '↺ Não é indesejada' : '✕ Indesejada';
+      cards.forEach(card => {
+        card.classList.toggle('indesejada', indesejada);
+        card.querySelector('.indesejada-btn').textContent = indesejada ? '↺ Não é indesejada' : '✕ Indesejada';
+      });
       showToast(indesejada ? 'Captura marcada como indesejada' : 'Marcação de indesejada removida');
       if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);   // a primeira foto pode ter mudado
+      onMarcacaoAlterada();
     } catch(e) {
       showToast('Erro de conexão', 'var(--red)');
     }
@@ -671,7 +702,7 @@
       const to   = d.offset + d.items.length;
       document.getElementById('tabuleiro-count').textContent =
         d.total > d.items.length ? `${from}–${to} de ${d.total} pessoa(s)` : `${d.total} pessoa(s)`;
-      renderTabuleiroPagination(d.total, d.offset, tabuleiroLimit);
+      renderPagination('tabuleiro-pagination', 'loadTabuleiro', d.total, d.offset, tabuleiroLimit);
       if (!d.items.length) {
         grid.innerHTML = '<div class="eventos-empty">Nenhuma pessoa encontrada</div>';
         return;
@@ -682,8 +713,9 @@
     }
   }
 
-  function renderTabuleiroPagination(total, offset, limit) {
-    const el = document.getElementById('tabuleiro-pagination');
+  // loader: nome da função global que carrega a página a partir de um offset
+  function renderPagination(elId, loader, total, offset, limit) {
+    const el = document.getElementById(elId);
     if (total <= limit) {
       el.style.display = 'none';
       el.innerHTML = '';
@@ -693,9 +725,9 @@
     const pages = Math.ceil(total / limit);
     el.style.display = 'flex';
     el.innerHTML = `
-      <button class="btn secondary" ${offset <= 0 ? 'disabled' : ''} onclick="loadTabuleiro(${Math.max(offset - limit, 0)})">‹ Anterior</button>
+      <button class="btn secondary" ${offset <= 0 ? 'disabled' : ''} onclick="${loader}(${Math.max(offset - limit, 0)})">‹ Anterior</button>
       <span class="mono">Página ${page} de ${pages}</span>
-      <button class="btn secondary" ${offset + limit >= total ? 'disabled' : ''} onclick="loadTabuleiro(${offset + limit})">Próxima ›</button>
+      <button class="btn secondary" ${offset + limit >= total ? 'disabled' : ''} onclick="${loader}(${offset + limit})">Próxima ›</button>
     `;
   }
 
@@ -762,6 +794,68 @@
       refreshDuplicataViews();
     } catch(e) {
       showToast('Erro de conexão', 'var(--red)');
+    }
+  }
+
+  // ---- Intrusas / Indesejadas ----
+  let marcadasLoaded = false;
+  let marcadasOffset = 0;
+  let marcadasLimit  = 120;
+
+  function activateMarcadas() {
+    switchTab('marcadas');
+    if (!marcadasLoaded) loadMarcadas(0);
+  }
+
+  // Fora da aba, a lista fica velha: recarrega ao voltar. Dentro dela, o card
+  // continua visível (já atualizado) para dar para desfazer na hora.
+  function onMarcacaoAlterada() {
+    if (!document.getElementById('tab-marcadas').classList.contains('active')) marcadasLoaded = false;
+  }
+
+  function marcadaItem(e) {
+    const nome = e.pessoa_nome && e.pessoa_nome !== '—' ? e.pessoa_nome : 'Anônimo';
+    const ref = {face_image_url: e.primeira_face_image_url, timestamp_ref: e.primeira_timestamp};
+    const quando = [
+      e.intruso_em    ? `intrusa em ${fmtTs(e.intruso_em)}` : '',
+      e.indesejada_em ? `indesejada em ${fmtTs(e.indesejada_em)}` : '',
+    ].filter(Boolean).join(' · ');
+    return `
+    <div class="marcada-item">
+      <div class="marcada-item-info">
+        <span class="pessoa-row-code">${e.person_unique_id || '—'}</span>
+        <span class="pessoa-row-nome">${nome}</span>
+      </div>
+      ${renderEventoCard(e, ref)}
+      <div class="marcada-item-quando">${quando}</div>
+    </div>`;
+  }
+
+  async function loadMarcadas(offset) {
+    marcadasLoaded = true;
+    marcadasOffset = offset ?? marcadasOffset;
+    const grid = document.getElementById('marcadas-grid');
+    grid.innerHTML = '<div class="eventos-empty">Carregando...</div>';
+
+    const params = new URLSearchParams();
+    const tipo = document.getElementById('f-marc-tipo').value;
+    if (tipo) params.set('tipo', tipo);
+    params.set('offset', marcadasOffset);
+
+    try {
+      const r = await fetch(BASE + '/api/marcadas?' + params);
+      const d = await r.json();
+      marcadasLimit = d.limit || marcadasLimit;
+      const from = d.items.length ? d.offset + 1 : 0;
+      const to   = d.offset + d.items.length;
+      document.getElementById('marcadas-count').textContent =
+        d.total > d.items.length ? `${from}–${to} de ${d.total} captura(s)` : `${d.total} captura(s)`;
+      renderPagination('marcadas-pagination', 'loadMarcadas', d.total, d.offset, marcadasLimit);
+      grid.innerHTML = d.items.length
+        ? d.items.map(marcadaItem).join('')
+        : '<div class="eventos-empty">Nenhuma captura marcada — use os botões ⚠ Intruso / ✕ Indesejada nos cards de Eventos Recentes</div>';
+    } catch(e) {
+      grid.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
     }
   }
 

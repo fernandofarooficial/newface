@@ -665,6 +665,25 @@
     }
     .dup-grupo .tabuleiro-grid { margin-bottom: 10px; }
     .dup-pares { width: 100%; border-collapse: collapse; }
+
+    /* ---- Intrusas / Indesejadas ---- */
+    .marcadas-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .marcada-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .marcada-item-info { display: flex; gap: 8px; align-items: baseline; }
+    .marcada-item-quando { font-family: var(--mono); font-size: 10px; color: var(--muted); max-width: 254px; }
     .dup-pares td { padding: 6px 8px; font-size: 12px; }
     .dup-pares .btn { padding: 4px 10px; font-size: 11px; }
     .tabuleiro-card { position: relative; }

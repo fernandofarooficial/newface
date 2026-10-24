@@ -515,6 +515,62 @@ def tabuleiro():
 
 
 # ------------------------------------------------------------------
+# API - Capturas marcadas pelo usuário como intrusas/indesejadas (migrations 007/008)
+# ------------------------------------------------------------------
+MARCADAS_LIMIT = 120
+
+
+@bp.route("/api/marcadas")
+def marcadas():
+    """Capturas marcadas como intrusas e/ou indesejadas, marcação mais recente primeiro.
+
+    `tipo`: `intruso`, `indesejada` ou vazio (as duas). Cada item traz a
+    primeira foto da pessoa (que já ignora capturas marcadas) para comparação.
+    """
+    tipo = request.args.get("tipo", "")
+    offset = max(int(request.args.get("offset", 0)), 0)
+
+    q = db.session.query(EventoFacial).options(subqueryload(EventoFacial.matches))
+    if tipo == "intruso":
+        q = q.filter(EventoFacial.intruso == True)
+    elif tipo == "indesejada":
+        q = q.filter(EventoFacial.indesejada == True)
+    else:
+        q = q.filter(or_(EventoFacial.intruso == True, EventoFacial.indesejada == True))
+
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        q = q.filter(EventoFacial.camera_id.in_(allowed))
+
+    # GREATEST ignora nulls: ordena pela marcação mais recente entre as duas
+    q = q.order_by(desc(func.greatest(EventoFacial.intruso_em, EventoFacial.indesejada_em)),
+                   desc(EventoFacial.id))
+    total = q.count()
+    eventos = q.offset(offset).limit(MARCADAS_LIMIT).all()
+
+    primeiras = _primeiras_faces(list({ev.pessoa_id for ev in eventos if ev.pessoa_id}))
+
+    items = []
+    for ev in eventos:
+        pf = primeiras.get(ev.pessoa_id)
+        items.append({
+            **ev.to_dict(),
+            "pessoa_id": ev.pessoa_id,
+            "intruso_em": ev.intruso_em.isoformat() if ev.intruso_em else None,
+            "indesejada_em": ev.indesejada_em.isoformat() if ev.indesejada_em else None,
+            "primeira_face_image_url": pf.face_image_url if pf else None,
+            "primeira_timestamp": pf.timestamp_evento.isoformat() if pf and pf.timestamp_evento else None,
+        })
+
+    return jsonify({
+        "total": total,
+        "limit": MARCADAS_LIMIT,
+        "offset": offset,
+        "items": items,
+    })
+
+
+# ------------------------------------------------------------------
 # API - Pessoas marcadas pelo usuário como o mesmo rosto (migration 006)
 # ------------------------------------------------------------------
 def _pessoas_visiveis(pessoa_ids):
