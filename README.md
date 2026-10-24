@@ -195,6 +195,7 @@ git push -u origin main
 | GET | `/api/duplicatas` | Grupos de pessoas marcadas pelo usuário como o mesmo rosto (aba Duplicatas) |
 | POST | `/api/duplicatas` | `{pessoa_ids: [...]}` — marca 2+ pessoas como o mesmo rosto |
 | DELETE | `/api/duplicatas/:id` | Remove um par marcado |
+| GET | `/api/relatorio?date_from=&date_to=` | Estatísticas (aba Relatório): coletas, pessoas criadas/vistas, intrusas, indesejadas e duplicatas, no total, por dia e por câmera. Sem datas = banco inteiro; dias no fuso de São Paulo. Aceita também `camera_id`/`store_id` |
 | GET | `/api/marcadas?tipo=` | Capturas marcadas como intrusas e/ou indesejadas (aba Intrusas / Indesejadas); `tipo` = `intruso`, `indesejada` ou vazio (as duas) |
 
 > O estabelecimento de cada evento vem do cadastro de câmeras (`cameras.estabelecimento_id`), não do `store_id` enviado pela API Facial, que não bate com o cadastro. O filtro `store_id` de `/api/eventos` e `/api/pessoas-eventos` também filtra pelas câmeras do estabelecimento. Detalhes em `DATABASE.md`.

@@ -28,6 +28,7 @@
   <button class="tab-btn" data-tab="tabuleiro" onclick="activateTabuleiro()">Tabuleiro</button>
   <button class="tab-btn" data-tab="duplicatas" onclick="activateDuplicatas()">Duplicatas</button>
   <button class="tab-btn" data-tab="marcadas" onclick="activateMarcadas()">Intrusas / Indesejadas</button>
+  <button class="tab-btn" data-tab="relatorio" onclick="activateRelatorio()">Relatório</button>
 </div>
 
 <!-- Tab: Eventos -->
@@ -184,6 +185,52 @@
     <div class="eventos-empty">Carregando...</div>
   </div>
   <div class="pagination" id="marcadas-pagination" style="display:none"></div>
+</div>
+
+<!-- Tab: Relatório -->
+<div id="tab-relatorio" class="tab-panel">
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label class="filter-label">De</label>
+      <input type="date" id="f-rel-date-from" class="filter-input">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Até</label>
+      <input type="date" id="f-rel-date-to" class="filter-input">
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Estabelecimento</label>
+      <select id="f-rel-estabelecimento" class="filter-select" onchange="onRelEstabelecimentoChange()">
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Câmera</label>
+      <select id="f-rel-camera" class="filter-select">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label">Atalhos</label>
+      <div class="rel-atalhos">
+        <button class="btn secondary" onclick="relPeriodo(1)">Hoje</button>
+        <button class="btn secondary" onclick="relPeriodo(7)">7 dias</button>
+        <button class="btn secondary" onclick="relPeriodo(30)">30 dias</button>
+        <button class="btn secondary" onclick="relPeriodo(0)">Banco inteiro</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <span class="mono" id="rel-periodo">—</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn secondary" onclick="window.print()">🖨 Imprimir</button>
+      <button class="btn" onclick="loadRelatorio()">Gerar relatório</button>
+    </div>
+  </div>
+  <div id="relatorio-body">
+    <div class="eventos-empty">Carregando...</div>
+  </div>
 </div>
 
 <!-- Barra de seleção para marcar duplicata (aparece com pessoas selecionadas) -->
@@ -401,7 +448,7 @@
     allCameras = await rCam.json();
     const estabelecimentos = await rEst.json();
 
-    ['f-estabelecimento', 'f-tab-estabelecimento'].forEach(selId => {
+    ['f-estabelecimento', 'f-tab-estabelecimento', 'f-rel-estabelecimento'].forEach(selId => {
       const selEst = document.getElementById(selId);
       estabelecimentos.forEach(e => {
         const o = document.createElement('option');
@@ -413,6 +460,7 @@
 
     filterCameras('');
     filterCameras('', 'f-tab-camera');
+    filterCameras('', 'f-rel-camera');
     await searchPessoas('');
   }
 
@@ -856,6 +904,167 @@
         : '<div class="eventos-empty">Nenhuma captura marcada — use os botões ⚠ Intruso / ✕ Indesejada nos cards de Eventos Recentes</div>';
     } catch(e) {
       grid.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
+    }
+  }
+
+  // ---- Relatório ----
+  let relatorioLoaded = false;
+
+  function activateRelatorio() {
+    switchTab('relatorio');
+    if (!relatorioLoaded) loadRelatorio();
+  }
+
+  function onRelEstabelecimentoChange() {
+    filterCameras(document.getElementById('f-rel-estabelecimento').value, 'f-rel-camera');
+    document.getElementById('f-rel-camera').value = '';
+  }
+
+  // Dia (YYYY-MM-DD) no fuso de São Paulo, `diasAtras` dias antes de hoje
+  function diaSP(diasAtras = 0) {
+    const d = new Date(Date.now() - diasAtras * 86_400_000);
+    return d.toLocaleDateString('en-CA', {timeZone: 'America/Sao_Paulo'});
+  }
+
+  // n = quantidade de dias terminando hoje; 0 = banco inteiro
+  function relPeriodo(n) {
+    document.getElementById('f-rel-date-from').value = n ? diaSP(n - 1) : '';
+    document.getElementById('f-rel-date-to').value   = n ? diaSP(0) : '';
+    loadRelatorio();
+  }
+
+  function fmtDia(dia, comSemana = false) {
+    if (!dia) return '—';
+    const d = new Date(dia + 'T12:00:00');
+    const txt = d.toLocaleDateString('pt-BR', {day: '2-digit', month: '2-digit', year: '2-digit'});
+    return comSemana ? `${d.toLocaleDateString('pt-BR', {weekday: 'short'}).replace('.', '')} ${txt}` : txt;
+  }
+
+  function fmtNum(n) { return (n ?? 0).toLocaleString('pt-BR'); }
+
+  function pct(a, b) {
+    return b ? (a / b * 100).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%' : '—';
+  }
+
+  function relCard(label, valor, cor, detalhe) {
+    return `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value ${cor}">${valor}</div>
+      ${detalhe ? `<div class="rel-detalhe">${detalhe}</div>` : ''}
+    </div>`;
+  }
+
+  // Tabela de quebra (por dia ou por câmera); `chave` formata a primeira coluna
+  function relTabela(titulo, colChave, linhas, chave, total) {
+    const row = (x, k, cls = '') => `
+        <tr class="${cls}">
+          <td class="mono">${k}</td>
+          <td>${fmtNum(x.coletas)}</td>
+          <td>${fmtNum(x.pessoas_criadas)}</td>
+          <td>${fmtNum(x.pessoas_vistas)}</td>
+          <td>${fmtNum(x.intrusas)}</td>
+          <td>${fmtNum(x.indesejadas)}</td>
+          <td>${fmtNum(x.duplicatas_excedentes)}</td>
+          <td>${pct(x.coletas_nc, x.coletas)}</td>
+          <td>${pct(x.duplicatas_excedentes, x.pessoas_criadas)}</td>
+        </tr>`;
+    return `
+    <div class="rel-secao">${titulo}</div>
+    <div class="table-wrap rel-tabela">
+      <table>
+        <thead><tr>
+          <th>${colChave}</th><th>Coletas</th><th>Pessoas criadas</th><th>Pessoas vistas</th>
+          <th>Intrusas</th><th>Indesejadas</th><th>Duplicatas</th>
+          <th title="(intrusas ou indesejadas) / coletas">% NC coletas</th>
+          <th title="duplicatas / pessoas criadas">% duplicação</th>
+        </tr></thead>
+        <tbody>
+          ${linhas.map(x => row(x, chave(x))).join('')}
+          ${row(total, 'Total', 'rel-total')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  async function loadRelatorio() {
+    relatorioLoaded = true;
+    const body = document.getElementById('relatorio-body');
+    body.innerHTML = '<div class="eventos-empty">Carregando...</div>';
+
+    const params = new URLSearchParams();
+    const df = document.getElementById('f-rel-date-from').value;
+    const dt = document.getElementById('f-rel-date-to').value;
+    const est = document.getElementById('f-rel-estabelecimento').value;
+    const cam = document.getElementById('f-rel-camera').value;
+    if (df)  params.set('date_from', df);
+    if (dt)  params.set('date_to', dt);
+    if (est) params.set('store_id', est);
+    if (cam) params.set('camera_id', cam);
+
+    try {
+      const r = await fetch(BASE + '/api/relatorio?' + params);
+      const d = await r.json();
+      const t = d.total;
+
+      const recorte = [
+        est ? document.getElementById('f-rel-estabelecimento').selectedOptions[0].textContent : '',
+        cam,
+      ].filter(Boolean).join(' · ');
+      const periodo = df || dt
+        ? `${df ? fmtDia(df) : 'início'} a ${dt ? fmtDia(dt) : 'hoje'}`
+        : `banco inteiro${t.primeiro_dia ? ` (${fmtDia(t.primeiro_dia)} a ${fmtDia(t.ultimo_dia)})` : ''}`;
+      document.getElementById('rel-periodo').textContent =
+        `Período: ${periodo}${recorte ? ' · ' + recorte : ''} · dias no fuso de São Paulo`;
+
+      if (!t.coletas) {
+        body.innerHTML = '<div class="eventos-empty">Nenhuma coleta no período</div>';
+        return;
+      }
+
+      const recorrentes = t.pessoas_vistas - t.pessoas_criadas;
+      const conformes   = t.coletas - t.coletas_nc;
+      const reais       = t.pessoas_criadas - t.duplicatas_excedentes;
+
+      body.innerHTML = `
+        <div class="rel-secao">Coletas e pessoas</div>
+        <div class="stats-grid">
+          ${relCard('Coletas', fmtNum(t.coletas), '',
+                    `${(t.coletas / Math.max(t.pessoas_vistas, 1)).toLocaleString('pt-BR', {maximumFractionDigits: 1})} coleta(s) por pessoa vista`)}
+          ${relCard('Pessoas criadas', fmtNum(t.pessoas_criadas), 'purple',
+                    `${pct(t.pessoas_criadas, t.coletas)} das coletas criaram uma pessoa`)}
+          ${relCard('Pessoas vistas', fmtNum(t.pessoas_vistas), 'green',
+                    `${fmtNum(recorrentes)} recorrente(s) — ${pct(recorrentes, t.pessoas_vistas)} já existiam antes`)}
+          ${relCard('Pessoas reais (estimativa)', fmtNum(reais), 'yellow',
+                    `pessoas criadas − duplicatas`)}
+        </div>
+
+        <div class="rel-secao">Não conformidades</div>
+        <div class="stats-grid">
+          ${relCard('Intrusas', fmtNum(t.intrusas), 'red',
+                    `${pct(t.intrusas, t.coletas)} das coletas — rosto de outra pessoa`)}
+          ${relCard('Indesejadas', fmtNum(t.indesejadas), 'yellow',
+                    `${pct(t.indesejadas, t.coletas)} das coletas — de costas, encoberta, pouca luz...`)}
+          ${relCard('Duplicatas', fmtNum(t.duplicatas_excedentes), 'red',
+                    `${pct(t.duplicatas_excedentes, t.pessoas_criadas)} das pessoas criadas eram cadastros a mais · ${fmtNum(t.pessoas_em_duplicata)} pessoa(s) em ${fmtNum(t.grupos_duplicata)} grupo(s)`)}
+          ${relCard('Coletas conformes', pct(conformes, t.coletas), 'green',
+                    `${fmtNum(conformes)} de ${fmtNum(t.coletas)} · ${fmtNum(t.coletas_nc)} intrusa(s) ou indesejada(s)`)}
+        </div>
+
+        ${relTabela('Por dia', 'Dia', d.por_dia, x => fmtDia(x.dia, true), t)}
+        ${relTabela('Por câmera', 'Câmera', d.por_camera, x => x.camera_id || '—', t)}
+
+        <div class="rel-notas">
+          <b>Como os números são contados</b><br>
+          <b>Pessoa criada</b>: a primeira coleta da pessoa no banco inteiro caiu no recorte.
+          <b>Pessoa vista</b>: teve ao menos uma coleta no recorte; <b>recorrente</b> = vista mas criada antes.<br>
+          <b>Duplicata</b>: pessoa criada no recorte que foi marcada como mesmo rosto de outra e não é a mais antiga do grupo —
+          um cadastro a mais para alguém que já existia. Os percentuais de duplicata usam as pessoas criadas como base; os de intrusa/indesejada, as coletas.<br>
+          Intrusas e indesejadas contam pela data da coleta, não pela data em que foram marcadas. Uma coleta pode ser intrusa e indesejada ao mesmo tempo
+          (conta uma vez em "coletas conformes").
+        </div>`;
+    } catch(e) {
+      body.innerHTML = `<div class="eventos-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
     }
   }
 

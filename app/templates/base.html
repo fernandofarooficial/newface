@@ -102,6 +102,7 @@
     .stat-value.green { color: var(--green); }
     .stat-value.purple { color: var(--accent2); }
     .stat-value.yellow { color: var(--yellow); }
+    .stat-value.red { color: var(--red); }
 
     /* Tabs */
     .tabs {
@@ -665,6 +666,34 @@
     }
     .dup-grupo .tabuleiro-grid { margin-bottom: 10px; }
     .dup-pares { width: 100%; border-collapse: collapse; }
+
+    /* ---- Relatório ---- */
+    .rel-atalhos { display: flex; gap: 6px; }
+    .rel-atalhos .btn { padding: 6px 10px; font-size: 12px; }
+    .rel-secao {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin: 8px 0 10px;
+    }
+    .rel-detalhe { margin-top: 6px; font-size: 11px; color: var(--muted); }
+    .rel-tabela { margin-bottom: 20px; }
+    .rel-tabela td { font-family: var(--mono); font-size: 12px; }
+    .rel-total td { font-weight: 700; border-top: 1px solid var(--border); }
+    .rel-notas { font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
+
+    /* Impressão: só o relatório (aba ativa), em fundo branco */
+    @media print {
+      header, .tabs, main > .stats-grid, .filter-bar, .toolbar .btn, #toast, .dup-bar { display: none !important; }
+      body { background: #fff !important; color: #000 !important; }
+      main { padding: 0; }
+      .stat-card, .table-wrap, thead tr { background: #fff !important; border-color: #bbb !important; }
+      td, th { border-color: #ddd !important; color: #000 !important; }
+      .stat-label, .rel-detalhe, .rel-notas, .mono { color: #333 !important; }
+      .rel-secao { color: #000 !important; }
+      .stats-grid { break-inside: avoid; }
+    }
 
     /* ---- Intrusas / Indesejadas ---- */
     .marcadas-grid {

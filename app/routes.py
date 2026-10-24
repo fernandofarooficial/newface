@@ -515,6 +515,128 @@ def tabuleiro():
 
 
 # ------------------------------------------------------------------
+# API - Relatório de estatísticas (coletas, pessoas, não conformidades)
+# ------------------------------------------------------------------
+RELATORIO_TZ = "America/Sao_Paulo"
+
+# Uma linha por evento no recorte, já com as flags que o relatório soma.
+# - criou: é o primeiro evento da pessoa no banco inteiro (= a coleta que criou a pessoa)
+# - dup_excedente: criou uma pessoa que está num grupo de duplicata e não é o
+#   membro mais antigo do grupo (grupo_id = menor pessoas.id) — é um cadastro
+#   a mais para um rosto que já existia
+# GROUPING SETS devolve na mesma consulta o total, a quebra por dia e por câmera.
+_RELATORIO_SQL = """
+WITH primeiro AS (
+    SELECT DISTINCT ON (pessoa_id) pessoa_id, id AS evento_id
+      FROM itumbiara.eventos_faciais
+     WHERE pessoa_id IS NOT NULL
+     ORDER BY pessoa_id, timestamp_evento, id
+),
+ev AS (
+    SELECT e.pessoa_id,
+           e.camera_id,
+           e.intruso,
+           e.indesejada,
+           (e.timestamp_evento AT TIME ZONE '{tz}')::date AS dia,
+           pr.evento_id IS NOT NULL AS criou,
+           pr.evento_id IS NOT NULL AND v.grupo_id IS NOT NULL AS criou_em_dup,
+           pr.evento_id IS NOT NULL AND v.grupo_id IS NOT NULL AND v.grupo_id <> e.pessoa_id AS dup_excedente,
+           CASE WHEN pr.evento_id IS NOT NULL THEN v.grupo_id END AS grupo_criado
+      FROM itumbiara.eventos_faciais e
+      LEFT JOIN primeiro pr ON pr.evento_id = e.id
+      LEFT JOIN itumbiara.vw_grupos_duplicatas v ON v.pessoa_id = e.pessoa_id
+     WHERE {where}
+)
+SELECT GROUPING(dia) AS g_dia,
+       GROUPING(camera_id) AS g_cam,
+       dia,
+       camera_id,
+       COUNT(*)                                        AS coletas,
+       COUNT(DISTINCT pessoa_id)                       AS pessoas_vistas,
+       COUNT(*) FILTER (WHERE criou)                   AS pessoas_criadas,
+       COUNT(*) FILTER (WHERE intruso)                 AS intrusas,
+       COUNT(*) FILTER (WHERE indesejada)              AS indesejadas,
+       COUNT(*) FILTER (WHERE intruso OR indesejada)   AS coletas_nc,
+       COUNT(*) FILTER (WHERE criou_em_dup)            AS pessoas_em_duplicata,
+       COUNT(*) FILTER (WHERE dup_excedente)           AS duplicatas_excedentes,
+       COUNT(DISTINCT grupo_criado)                    AS grupos_duplicata,
+       MIN(dia)                                        AS primeiro_dia,
+       MAX(dia)                                        AS ultimo_dia
+  FROM ev
+ GROUP BY GROUPING SETS ((), (dia), (camera_id))
+"""
+
+_RELATORIO_CAMPOS = ("coletas", "pessoas_vistas", "pessoas_criadas", "intrusas", "indesejadas",
+                     "coletas_nc", "pessoas_em_duplicata", "duplicatas_excedentes", "grupos_duplicata")
+
+
+def _parse_dia(valor):
+    try:
+        return datetime.strptime(valor, "%Y-%m-%d").date() if valor else None
+    except ValueError:
+        return None
+
+
+@bp.route("/api/relatorio")
+def relatorio():
+    """Estatísticas do recorte: banco inteiro ou `date_from`..`date_to` (dias no fuso de São Paulo, inclusivos).
+
+    Também aceita `camera_id`/`store_id` e respeita as câmeras liberadas para a sessão.
+    """
+    date_from = _parse_dia(request.args.get("date_from"))
+    date_to = _parse_dia(request.args.get("date_to"))
+
+    where = ["1 = 1"]
+    params = {}
+    binds = []
+    if date_from:
+        where.append(f"e.timestamp_evento >= CAST(:ini AS date)::timestamp AT TIME ZONE '{RELATORIO_TZ}'")
+        params["ini"] = date_from.isoformat()
+    if date_to:
+        where.append(f"e.timestamp_evento < (CAST(:fim AS date) + 1)::timestamp AT TIME ZONE '{RELATORIO_TZ}'")
+        params["fim"] = date_to.isoformat()
+    allowed = _allowed_cameras()
+    if allowed is not None:
+        where.append("e.camera_id IN :cams")
+        params["cams"] = list(allowed)
+        binds.append(bindparam("cams", expanding=True))
+    camera_id = request.args.get("camera_id")
+    if camera_id:
+        where.append("e.camera_id = :camera_id")
+        params["camera_id"] = camera_id
+    store_id = request.args.get("store_id")
+    if store_id:
+        where.append("e.camera_id IN (SELECT camera_id FROM itumbiara.cameras WHERE estabelecimento_id = :store_id)")
+        params["store_id"] = int(store_id)
+
+    sql = text(_RELATORIO_SQL.format(tz=RELATORIO_TZ, where=" AND ".join(where))).bindparams(*binds)
+
+    total = dict.fromkeys(_RELATORIO_CAMPOS, 0)
+    total.update(primeiro_dia=None, ultimo_dia=None)
+    por_dia, por_camera = [], []
+    for r in db.session.execute(sql, params):
+        linha = {c: getattr(r, c) for c in _RELATORIO_CAMPOS}
+        if r.g_dia and r.g_cam:
+            total.update(linha,
+                         primeiro_dia=r.primeiro_dia.isoformat() if r.primeiro_dia else None,
+                         ultimo_dia=r.ultimo_dia.isoformat() if r.ultimo_dia else None)
+        elif not r.g_dia:
+            por_dia.append({"dia": r.dia.isoformat(), **linha})
+        else:
+            por_camera.append({"camera_id": r.camera_id, **linha})
+
+    por_dia.sort(key=lambda x: x["dia"])
+    por_camera.sort(key=lambda x: x["coletas"], reverse=True)
+    return jsonify({
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "total": total,
+        "por_dia": por_dia,
+        "por_camera": por_camera,
+    })
+
+
+# ------------------------------------------------------------------
 # API - Capturas marcadas pelo usuário como intrusas/indesejadas (migrations 007/008)
 # ------------------------------------------------------------------
 MARCADAS_LIMIT = 120
