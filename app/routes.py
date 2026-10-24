@@ -415,6 +415,9 @@ def _build_event_filters(q):
     return q
 
 
+PESSOAS_EVENTOS_LIMIT = 100   # pessoas na aba Eventos Recentes quando nenhuma é filtrada
+
+
 @bp.route("/api/pessoas-eventos")
 def pessoas_eventos():
     pessoa_ids = request.args.getlist("pessoa_id")
@@ -429,7 +432,7 @@ def pessoas_eventos():
         pq = pq.filter(Pessoa.id.in_(pessoa_ids))
         pessoas = pq.all()
     else:
-        pessoas = pq.limit(50).all()
+        pessoas = pq.limit(PESSOAS_EVENTOS_LIMIT).all()
 
     dups = _duplicata_por_pessoa([p.id for p in pessoas])
     items = []
