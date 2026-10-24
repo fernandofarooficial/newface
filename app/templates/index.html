@@ -246,7 +246,8 @@
       : '';
 
     return `
-    <div class="evento-card ${match ? 'dual' : 'single'}">
+    <div class="evento-card ${match ? 'dual' : 'single'} ${e.intruso ? 'intruso' : ''}" id="ev-card-${e.id}">
+      <div class="evento-intruso-tag">INTRUSO</div>
       <div class="evento-photos">
         ${photoCol(e.face_image_url, e.timestamp_evento)}
         ${match ? photoCol(match.face_image_url, match.timestamp_ref) : ''}
@@ -260,8 +261,30 @@
           ${qualPct  != null ? `<span class="metric-o">O:${qualPct}%</span>`  : ''}
           ${matchPct != null ? `<span class="metric-r">R:${matchPct}%</span>` : ''}
         </div>
+        <button class="intruso-btn" onclick="toggleIntruso(${e.id})"
+                title="Marcar/desmarcar: o rosto desta captura não é desta pessoa">${e.intruso ? '↺ Não é intruso' : '⚠ Intruso'}</button>
       </div>
     </div>`;
+  }
+
+  // Marca/desmarca a captura como intrusa e atualiza só o card, sem recarregar a lista
+  async function toggleIntruso(eventoId) {
+    const card = document.getElementById(`ev-card-${eventoId}`);
+    const intruso = !card.classList.contains('intruso');
+    try {
+      const r = await fetch(`${BASE}/api/eventos/${eventoId}/intruso`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({intruso})
+      });
+      if (!r.ok) { showToast('Erro ao marcar captura', 'var(--red)'); return; }
+      card.classList.toggle('intruso', intruso);
+      card.querySelector('.intruso-btn').textContent = intruso ? '↺ Não é intruso' : '⚠ Intruso';
+      showToast(intruso ? 'Captura marcada como intrusa' : 'Marcação de intruso removida');
+      if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);   // a primeira foto pode ter mudado
+    } catch(e) {
+      showToast('Erro de conexão', 'var(--red)');
+    }
   }
 
   // ---- Linha de pessoa ----

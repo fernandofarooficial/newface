@@ -25,6 +25,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/003_camera_fk.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/004_check_constraints.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/005_sync_control_history_index.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/006_pessoas_duplicadas.sql
+psql -U fefa_dev -h localhost -d lojas -f migrations/007_evento_intruso.sql
 ```
 
 | Arquivo | O que faz |
@@ -35,6 +36,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/006_pessoas_duplicadas.sql
 | `004_check_constraints.sql` | CHECK constraints de domínio (gênero, score/similarity/quality em `[0,1]`, status de sync) (`NOT VALID`) |
 | `005_sync_control_history_index.sql` | Índice por `criado_em` em `sync_control`, agora que é histórico append-only |
 | `006_pessoas_duplicadas.sql` | Tabela `pessoas_duplicadas` (pares marcados pelo usuário como o mesmo rosto) e view `vw_grupos_duplicatas` (grupos) |
+| `007_evento_intruso.sql` | Colunas `intruso`/`intruso_em` em `eventos_faciais` (captura marcada pelo usuário como rosto de outra pessoa) |
 
 **Sobre `NOT VALID`** (migrations 003 e 004): a constraint passa a valer para todo `INSERT`/`UPDATE` novo imediatamente, mas não varre as linhas já existentes na hora do `ALTER TABLE` (evita lock longo em tabela grande). Cada arquivo termina com os `SELECT`s para checar dados antigos e os `ALTER TABLE ... VALIDATE CONSTRAINT ...` para rodar depois, manualmente, quando a checagem vier vazia.
 
@@ -130,6 +132,8 @@ Um registro por evento de detecção/reconhecimento recebido da API Facial.
 | `face_quality` | NUMERIC(5,4) | CHECK `chk_ef_face_quality` em `[0,1]`, migration 004 |
 | `face_image_url` | TEXT | Adicionado na migration 002; caminho servido via proxy `GET /api/face-image?path=...` |
 | `model_version` / `processing_node` | VARCHAR | Metadados do sistema de reconhecimento |
+| `intruso` | BOOLEAN NOT NULL DEFAULT false | Migration 007. `true` = o usuário marcou que o rosto desta captura **não é** da pessoa associada (a API errou a associação). Só sinaliza: `pessoa_id` não muda e `pessoas.total_deteccoes`/`primeira_deteccao`/`ultima_deteccao` não são recalculados. A única regra que muda é a "primeira foto" do Tabuleiro/Duplicatas (`_primeiras_faces`), que pula capturas intrusas. Alterado por `POST /api/eventos/<id>/intruso`; o collector nunca toca |
+| `intruso_em` | TIMESTAMPTZ | Quando foi marcada como intrusa; volta a null ao desmarcar |
 | `criado_em` | TIMESTAMPTZ | |
 
 Índices: `idx_ef_timestamp DESC`, `idx_ef_pessoa`, `idx_ef_person_unique`, `idx_ef_camera`, `idx_ef_estabelecimento`, `idx_ef_match_type`.

@@ -438,6 +438,37 @@
     }
     .evento-card.single { width: 130px; }
     .evento-card.dual   { width: 254px; }
+    .evento-card { position: relative; }
+    .evento-intruso-tag {
+      display: none;
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      z-index: 1;
+      background: var(--red);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .evento-card.intruso { border-color: var(--red); }
+    .evento-card.intruso .evento-intruso-tag { display: block; }
+    .evento-card.intruso .evento-photos img { opacity: .45; }
+    .intruso-btn {
+      margin-top: 4px;
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      padding: 2px 0;
+      cursor: pointer;
+    }
+    .intruso-btn:hover { color: var(--red); border-color: var(--red); }
+    .evento-card.intruso .intruso-btn { color: var(--red); border-color: var(--red); }
 
     .evento-photos {
       display: flex;
