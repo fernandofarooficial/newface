@@ -83,6 +83,8 @@
   <div class="toolbar">
     <span class="mono" id="eventos-count">Carregando...</span>
     <div style="display:flex;gap:8px">
+      <button class="btn secondary" id="btn-auto-refresh" onclick="toggleAutoRefresh()"
+              title="Pausa/retoma a atualização automática da tela (a cada 60s)">⏸ Pausar atualização</button>
       <button class="btn secondary" onclick="loadEventos()">↻ Atualizar</button>
       <button class="btn" id="btn-coletar" onclick="coletar()">⬇ Coletar Agora</button>
     </div>
@@ -1133,7 +1135,19 @@
   loadStatus();
   loadFiltroOptions().then(() => loadEventos());
   loadPessoas();
-  setInterval(() => { loadStatus(); loadEventos(); }, 60_000);
+  // Atualização automática; pode ser pausada enquanto o usuário analisa os resultados.
+  // Pausar só afeta o timer — "↻ Atualizar", filtros e "Coletar Agora" continuam recarregando.
+  let autoRefreshPausado = false;
+  setInterval(() => { if (!autoRefreshPausado) { loadStatus(); loadEventos(); } }, 60_000);
+
+  function toggleAutoRefresh() {
+    autoRefreshPausado = !autoRefreshPausado;
+    const btn = document.getElementById('btn-auto-refresh');
+    btn.classList.toggle('pausado', autoRefreshPausado);
+    btn.textContent = autoRefreshPausado ? '▶ Retomar atualização' : '⏸ Pausar atualização';
+    showToast(autoRefreshPausado ? 'Atualização automática pausada' : 'Atualização automática retomada');
+    if (!autoRefreshPausado) { loadStatus(); loadEventos(); }   // volta já com os dados atuais
+  }
 </script>
 
 <!-- Lightbox -->
