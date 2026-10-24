@@ -422,17 +422,21 @@ PESSOAS_EVENTOS_LIMIT = 100   # pessoas na aba Eventos Recentes quando nenhuma �
 def pessoas_eventos():
     pessoa_ids = request.args.getlist("pessoa_id")
 
-    # Seleciona as pessoas a exibir, ordenadas pela detecção mais recente
-    pq = db.session.query(Pessoa).filter(Pessoa.ultima_deteccao.isnot(None))\
-        .order_by(desc(Pessoa.ultima_deteccao))
-    allowed = _allowed_cameras()
-    if allowed is not None:
-        pq = pq.filter(Pessoa.eventos.any(EventoFacial.camera_id.in_(allowed)))
+    # Seleciona as pessoas com ao menos um evento que passa nos filtros (data,
+    # câmera, escopo...), ordenadas pelo evento mais recente dentro do filtro.
+    # Filtrar antes do limite: escolher as N vistas mais recentemente e só
+    # depois filtrar deixava de fora quem só apareceu num período antigo.
+    sub = _build_event_filters(db.session.query(
+        EventoFacial.pessoa_id.label("pessoa_id"),
+        func.max(EventoFacial.timestamp_evento).label("ultimo_evento"),
+    ))
     if pessoa_ids:
-        pq = pq.filter(Pessoa.id.in_(pessoa_ids))
-        pessoas = pq.all()
-    else:
-        pessoas = pq.limit(PESSOAS_EVENTOS_LIMIT).all()
+        sub = sub.filter(EventoFacial.pessoa_id.in_(pessoa_ids))
+    sub = sub.group_by(EventoFacial.pessoa_id).subquery()
+
+    pq = db.session.query(Pessoa).join(sub, sub.c.pessoa_id == Pessoa.id)\
+        .order_by(desc(sub.c.ultimo_evento), desc(Pessoa.id))
+    pessoas = pq.all() if pessoa_ids else pq.limit(PESSOAS_EVENTOS_LIMIT).all()
 
     dups = _duplicata_por_pessoa([p.id for p in pessoas])
     items = []
