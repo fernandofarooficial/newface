@@ -164,7 +164,8 @@ def _primeiras_faces(pessoa_ids):
     """{pessoa_id: row(face_image_url, timestamp_evento)} do primeiro evento de cada pessoa.
 
     Ignora capturas marcadas como intrusas — a foto de outra pessoa não pode
-    virar a "primeira foto" de ninguém.
+    virar a "primeira foto" de ninguém — e as marcadas como indesejadas (de
+    costas, encobertas, pouca luz...), que não servem para reconhecer a pessoa.
     """
     if not pessoa_ids:
         return {}
@@ -178,7 +179,9 @@ def _primeiras_faces(pessoa_ids):
         EventoFacial.face_image_url.label("face_image_url"),
         EventoFacial.timestamp_evento.label("timestamp_evento"),
         rn,
-    ).filter(EventoFacial.pessoa_id.in_(pessoa_ids), EventoFacial.intruso == False).subquery()
+    ).filter(EventoFacial.pessoa_id.in_(pessoa_ids),
+             EventoFacial.intruso == False,
+             EventoFacial.indesejada == False).subquery()
 
     rows = db.session.query(sub.c.pessoa_id, sub.c.face_image_url, sub.c.timestamp_evento)\
         .filter(sub.c.rn == 1).all()
@@ -314,6 +317,21 @@ def marcar_intruso(evento_id):
     ev.intruso_em = datetime.now(timezone.utc) if intruso else None
     db.session.commit()
     return jsonify({"ok": True, "id": ev.id, "intruso": ev.intruso})
+
+
+@bp.route("/api/eventos/<int:evento_id>/indesejada", methods=["POST"])
+def marcar_indesejada(evento_id):
+    """Marca/desmarca uma coleta indesejada (de costas, encoberta, pouca luz...)."""
+    indesejada = bool((request.get_json() or {}).get("indesejada", True))
+    ev = db.session.get(EventoFacial, evento_id)
+    allowed = _allowed_cameras()
+    if not ev or (allowed is not None and ev.camera_id not in allowed):
+        return jsonify({"error": "Evento não encontrado"}), 404
+
+    ev.indesejada = indesejada
+    ev.indesejada_em = datetime.now(timezone.utc) if indesejada else None
+    db.session.commit()
+    return jsonify({"ok": True, "id": ev.id, "indesejada": ev.indesejada})
 
 
 # ------------------------------------------------------------------

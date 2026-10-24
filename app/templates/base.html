@@ -453,6 +453,23 @@
       padding: 1px 5px;
       border-radius: 3px;
     }
+    .evento-indesejada-tag {
+      display: none;
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      z-index: 1;
+      background: var(--yellow);
+      color: #000;
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .evento-card.indesejada { border-color: var(--yellow); }
+    .evento-card.indesejada .evento-indesejada-tag { display: block; }
+    .evento-card.indesejada .evento-photos img { opacity: .45; }
     .evento-card.intruso { border-color: var(--red); }
     .evento-card.intruso .evento-intruso-tag { display: block; }
     .evento-card.intruso .evento-photos img { opacity: .45; }
@@ -468,7 +485,9 @@
       cursor: pointer;
     }
     .intruso-btn:hover { color: var(--red); border-color: var(--red); }
-    .evento-card.intruso .intruso-btn { color: var(--red); border-color: var(--red); }
+    .evento-card.intruso .intruso-btn:not(.indesejada-btn) { color: var(--red); border-color: var(--red); }
+    .indesejada-btn:hover { color: var(--yellow); border-color: var(--yellow); }
+    .evento-card.indesejada .indesejada-btn { color: var(--yellow); border-color: var(--yellow); }
 
     .evento-photos {
       display: flex;

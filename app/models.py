@@ -97,6 +97,8 @@ class EventoFacial(db.Model):
     processing_node    = db.Column(db.String(60))
     intruso            = db.Column(db.Boolean, nullable=False, default=False)  # rosto não é da pessoa (marcado pelo usuário)
     intruso_em         = db.Column(db.DateTime(timezone=True))
+    indesejada         = db.Column(db.Boolean, nullable=False, default=False)  # coleta ruim: de costas, encoberta, pouca luz... (marcado pelo usuário)
+    indesejada_em      = db.Column(db.DateTime(timezone=True))
     criado_em          = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
 
     pessoa         = db.relationship("Pessoa", back_populates="eventos")
@@ -120,6 +122,7 @@ class EventoFacial(db.Model):
             "face_quality": float(self.face_quality) if self.face_quality else None,
             "face_image_url": self.face_image_url,
             "intruso": self.intruso,
+            "indesejada": self.indesejada,
             "matches": [
                 {
                     "event_id_ref": m.event_id_ref,

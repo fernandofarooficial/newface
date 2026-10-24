@@ -26,6 +26,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/004_check_constraints.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/005_sync_control_history_index.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/006_pessoas_duplicadas.sql
 psql -U fefa_dev -h localhost -d lojas -f migrations/007_evento_intruso.sql
+psql -U fefa_dev -h localhost -d lojas -f migrations/008_evento_indesejada.sql
 ```
 
 | Arquivo | O que faz |
@@ -37,6 +38,7 @@ psql -U fefa_dev -h localhost -d lojas -f migrations/007_evento_intruso.sql
 | `005_sync_control_history_index.sql` | Índice por `criado_em` em `sync_control`, agora que é histórico append-only |
 | `006_pessoas_duplicadas.sql` | Tabela `pessoas_duplicadas` (pares marcados pelo usuário como o mesmo rosto) e view `vw_grupos_duplicatas` (grupos) |
 | `007_evento_intruso.sql` | Colunas `intruso`/`intruso_em` em `eventos_faciais` (captura marcada pelo usuário como rosto de outra pessoa) |
+| `008_evento_indesejada.sql` | Colunas `indesejada`/`indesejada_em` em `eventos_faciais` (captura marcada pelo usuário como coleta indesejada: de costas, encoberta, baixa resolução/luz...) |
 
 **Sobre `NOT VALID`** (migrations 003 e 004): a constraint passa a valer para todo `INSERT`/`UPDATE` novo imediatamente, mas não varre as linhas já existentes na hora do `ALTER TABLE` (evita lock longo em tabela grande). Cada arquivo termina com os `SELECT`s para checar dados antigos e os `ALTER TABLE ... VALIDATE CONSTRAINT ...` para rodar depois, manualmente, quando a checagem vier vazia.
 
@@ -134,6 +136,8 @@ Um registro por evento de detecção/reconhecimento recebido da API Facial.
 | `model_version` / `processing_node` | VARCHAR | Metadados do sistema de reconhecimento |
 | `intruso` | BOOLEAN NOT NULL DEFAULT false | Migration 007. `true` = o usuário marcou que o rosto desta captura **não é** da pessoa associada (a API errou a associação). Só sinaliza: `pessoa_id` não muda e `pessoas.total_deteccoes`/`primeira_deteccao`/`ultima_deteccao` não são recalculados. A única regra que muda é a "primeira foto" do Tabuleiro/Duplicatas (`_primeiras_faces`), que pula capturas intrusas. Alterado por `POST /api/eventos/<id>/intruso`; o collector nunca toca |
 | `intruso_em` | TIMESTAMPTZ | Quando foi marcada como intrusa; volta a null ao desmarcar |
+| `indesejada` | BOOLEAN NOT NULL DEFAULT false | Migration 008. `true` = o usuário marcou a captura como **coleta indesejada**: o rosto é da pessoa certa, mas a foto não serve (de costas, algo na frente do rosto, chapéu muito grande, baixa resolução, pouca luz). Independente de `intruso` (uma captura pode ter as duas marcações). Mesmas regras da intrusa: só sinaliza, nada é recalculado, e `_primeiras_faces` também a pula. Alterado por `POST /api/eventos/<id>/indesejada`; o collector nunca toca |
+| `indesejada_em` | TIMESTAMPTZ | Quando foi marcada como indesejada; volta a null ao desmarcar |
 | `criado_em` | TIMESTAMPTZ | |
 
 Índices: `idx_ef_timestamp DESC`, `idx_ef_pessoa`, `idx_ef_person_unique`, `idx_ef_camera`, `idx_ef_estabelecimento`, `idx_ef_match_type`.

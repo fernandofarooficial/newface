@@ -246,8 +246,9 @@
       : '';
 
     return `
-    <div class="evento-card ${match ? 'dual' : 'single'} ${e.intruso ? 'intruso' : ''}" id="ev-card-${e.id}">
+    <div class="evento-card ${match ? 'dual' : 'single'} ${e.intruso ? 'intruso' : ''} ${e.indesejada ? 'indesejada' : ''}" id="ev-card-${e.id}">
       <div class="evento-intruso-tag">INTRUSO</div>
+      <div class="evento-indesejada-tag">INDESEJADA</div>
       <div class="evento-photos">
         ${photoCol(e.face_image_url, e.timestamp_evento)}
         ${match ? photoCol(match.face_image_url, match.timestamp_ref) : ''}
@@ -263,6 +264,8 @@
         </div>
         <button class="intruso-btn" onclick="toggleIntruso(${e.id})"
                 title="Marcar/desmarcar: o rosto desta captura não é desta pessoa">${e.intruso ? '↺ Não é intruso' : '⚠ Intruso'}</button>
+        <button class="intruso-btn indesejada-btn" onclick="toggleIndesejada(${e.id})"
+                title="Marcar/desmarcar: coleta indesejada (de costas, rosto encoberto, chapéu, baixa resolução, pouca luz)">${e.indesejada ? '↺ Não é indesejada' : '✕ Indesejada'}</button>
       </div>
     </div>`;
   }
@@ -281,6 +284,26 @@
       card.classList.toggle('intruso', intruso);
       card.querySelector('.intruso-btn').textContent = intruso ? '↺ Não é intruso' : '⚠ Intruso';
       showToast(intruso ? 'Captura marcada como intrusa' : 'Marcação de intruso removida');
+      if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);   // a primeira foto pode ter mudado
+    } catch(e) {
+      showToast('Erro de conexão', 'var(--red)');
+    }
+  }
+
+  // Marca/desmarca a captura como coleta indesejada e atualiza só o card
+  async function toggleIndesejada(eventoId) {
+    const card = document.getElementById(`ev-card-${eventoId}`);
+    const indesejada = !card.classList.contains('indesejada');
+    try {
+      const r = await fetch(`${BASE}/api/eventos/${eventoId}/indesejada`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({indesejada})
+      });
+      if (!r.ok) { showToast('Erro ao marcar captura', 'var(--red)'); return; }
+      card.classList.toggle('indesejada', indesejada);
+      card.querySelector('.indesejada-btn').textContent = indesejada ? '↺ Não é indesejada' : '✕ Indesejada';
+      showToast(indesejada ? 'Captura marcada como indesejada' : 'Marcação de indesejada removida');
       if (tabuleiroLoaded) loadTabuleiro(tabuleiroOffset);   // a primeira foto pode ter mudado
     } catch(e) {
       showToast('Erro de conexão', 'var(--red)');

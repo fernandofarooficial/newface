@@ -29,7 +29,7 @@ newface/
 │       ├── base.html
 │       └── index.html   # Dashboard
 ├── migrations/
-│   └── 001...007_*.sql        # DDL – rodar no DBeaver, em ordem (ver DATABASE.md)
+│   └── 001...008_*.sql        # DDL – rodar no DBeaver, em ordem (ver DATABASE.md)
 ├── .env.example
 ├── .gitignore
 ├── gunicorn.conf.py
@@ -67,7 +67,7 @@ Acesse: http://localhost:5006
 
 ## 2. Banco de dados
 
-Execute os arquivos de `migrations/` no DBeaver/psql, em ordem numérica (001 a 007). Detalhes de cada um, o schema completo e o padrão `NOT VALID` + `VALIDATE CONSTRAINT` usado pelas migrations 003/004 estão em [`DATABASE.md`](./DATABASE.md).
+Execute os arquivos de `migrations/` no DBeaver/psql, em ordem numérica (001 a 008). Detalhes de cada um, o schema completo e o padrão `NOT VALID` + `VALIDATE CONSTRAINT` usado pelas migrations 003/004 estão em [`DATABASE.md`](./DATABASE.md).
 
 Conexão:
 - Host: `72.60.58.241`
@@ -187,6 +187,7 @@ git push -u origin main
 | GET | `/api/pessoas?limit=50` | Pessoas identificadas |
 | POST | `/api/pessoas/:id/nome` | Atualizar nome de uma pessoa |
 | POST | `/api/eventos/:id/intruso` | `{intruso: true/false}` — marca/desmarca uma captura como rosto de outra pessoa |
+| POST | `/api/eventos/:id/indesejada` | `{indesejada: true/false}` — marca/desmarca uma coleta indesejada (de costas, encoberta, baixa resolução/luz) |
 | POST | `/api/coletar` | Disparar coleta manual |
 | POST | `/api/reset-base` | **Destrutivo.** Apaga todos os eventos e pessoas (`TRUNCATE ... RESTART IDENTITY CASCADE`); exige sessão com acesso total (senha `ACCESS_CODE_ALL`), retorna `403` caso contrário |
 | GET | `/api/cameras` | Câmeras cadastradas |
